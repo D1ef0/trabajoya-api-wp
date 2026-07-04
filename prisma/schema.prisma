@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SessionStatus {
+  active
+  idle
+  closed
+  handoff
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+model ConversationSession {
+  id            String        @id @default(uuid()) @db.Uuid
+  waNumber      String        @unique @map("wa_number") @db.VarChar(32)
+  currentStep   String        @default("MENU_ROOT") @map("current_step") @db.VarChar(64)
+  context       Json          @default("{}")
+  status        SessionStatus @default(active)
+  lastMessageAt DateTime      @default(now()) @map("last_message_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  messages MessageLog[]
+
+  @@map("conversation_sessions")
+}
+
+model MessageLog {
+  id          String           @id @default(uuid()) @db.Uuid
+  sessionId   String           @map("session_id") @db.Uuid
+  direction   MessageDirection
+  type        String           @db.VarChar(32)
+  payload     Json
+  waMessageId String?          @map("wa_message_id") @db.VarChar(128)
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  session ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([waMessageId])
+  @@map("messages_log")
+}
+
+model WebhookEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  waMessageId String   @unique @map("wa_message_id") @db.VarChar(128)
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("webhook_events")
+}

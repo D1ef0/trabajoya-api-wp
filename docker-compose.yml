@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cvapi
+      POSTGRES_PASSWORD: cvapi
+      POSTGRES_DB: cv_api_wp
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cvapi -d cv_api_wp']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - '3000:3000'
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://cvapi:cvapi@postgres:5432/cv_api_wp?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ZAVUDEV_API_KEY: ${ZAVUDEV_API_KEY}
+      ZAVU_WEBHOOK_SECRET: ${ZAVU_WEBHOOK_SECRET}
+      ZAVU_SKIP_SIGNATURE_VERIFICATION: ${ZAVU_SKIP_SIGNATURE_VERIFICATION:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "./node_modules/.bin/prisma migrate deploy && node dist/main.js"
+
+volumes:
+  postgres_data:
+  redis_data:

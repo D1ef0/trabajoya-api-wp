@@ -1,0 +1,17 @@
+export default () => ({
+  port: parseInt(process.env.PORT ?? '3000', 10),
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  databaseUrl: process.env.DATABASE_URL,
+  redis: {
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+  },
+  zavu: {
+    apiKey: process.env.ZAVUDEV_API_KEY,
+    webhookSecret: process.env.ZAVU_WEBHOOK_SECRET,
+    skipSignatureVerification:
+      process.env.ZAVU_SKIP_SIGNATURE_VERIFICATION === 'true',
+  },
+  adminApiKey: process.env.ADMIN_API_KEY,
+});
