@@ -1,4 +1,12 @@
 const STORAGE_KEY = 'trabajoya_admin_token';
+const VALID_VIEWS = [
+  'overview',
+  'sessions',
+  'messages',
+  'funnel',
+  'webhooks',
+  'requests',
+];
 
 const state = {
   view: 'overview',
@@ -51,6 +59,17 @@ const els = {
   dialogThread: document.getElementById('dialog-thread'),
   dialogClose: document.getElementById('dialog-close'),
 };
+
+function getViewFromHash() {
+  const hash = window.location.hash.replace(/^#/, '').trim();
+  return VALID_VIEWS.includes(hash) ? hash : 'overview';
+}
+
+function syncViewHash(view) {
+  const nextHash = view === 'overview' ? '' : `#${view}`;
+  if (window.location.hash === nextHash) return;
+  window.location.hash = nextHash;
+}
 
 function getToken() {
   return localStorage.getItem(STORAGE_KEY) ?? '';
@@ -133,7 +152,7 @@ async function login() {
   setToken(data.accessToken);
   state.user = data.user;
   showApp();
-  switchView('overview');
+  switchView(getViewFromHash());
 }
 
 function formatDate(value) {
@@ -502,7 +521,11 @@ async function loadCurrentView() {
   if (state.view === 'requests') await loadRequests();
 }
 
-function switchView(view) {
+function switchView(view, { syncHash = true } = {}) {
+  if (!VALID_VIEWS.includes(view)) {
+    view = 'overview';
+  }
+
   state.view = view;
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.view === view);
@@ -510,6 +533,11 @@ function switchView(view) {
   document.querySelectorAll('.view').forEach((section) => {
     section.classList.toggle('hidden', section.id !== `view-${view}`);
   });
+
+  if (syncHash) {
+    syncViewHash(view);
+  }
+
   loadCurrentView().catch(console.error);
 }
 
@@ -582,11 +610,18 @@ async function bootstrap() {
     loadRequests().catch(console.error);
   });
 
+  window.addEventListener('hashchange', () => {
+    const view = getViewFromHash();
+    if (view !== state.view) {
+      switchView(view, { syncHash: false });
+    }
+  });
+
   if (getToken()) {
     try {
       state.user = await api('/auth/me');
       showApp();
-      switchView('overview');
+      switchView(getViewFromHash());
       return;
     } catch {
       /* fall through to login */
