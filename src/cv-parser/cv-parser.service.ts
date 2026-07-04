@@ -1,8 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MarkItDown } from 'markitdown-ts';
+import {
+  isMarkitdownErrorText,
+  sanitizeCvFileName,
+  sanitizeCvText,
+} from '../common/cv-text.util';
 import { CvParseError } from './cv-parser.types';
 
-const MAX_CV_TEXT_LENGTH = 12000;
 const SUPPORTED_EXTENSIONS = new Set([
   '.pdf',
   '.docx',
@@ -66,14 +70,19 @@ export class CvParserService {
       throw new CvParseError('CV conversion failed', 'conversion_failed');
     }
 
-    const text = normalizeExtractedText(result?.text_content ?? '');
+    const rawText = normalizeExtractedText(result?.text_content ?? '');
+    if (!rawText || isMarkitdownErrorText(rawText)) {
+      throw new CvParseError('CV file has no readable text', 'empty_text');
+    }
+
+    const text = sanitizeCvText(rawText);
     if (!text) {
       throw new CvParseError('CV file has no readable text', 'empty_text');
     }
 
     return {
-      text: limitText(text),
-      fileName: resolvedFileName,
+      text,
+      fileName: sanitizeCvFileName(resolvedFileName),
     };
   }
 }
@@ -135,12 +144,4 @@ function normalizeExtractedText(value: string): string {
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-}
-
-function limitText(text: string): string {
-  if (text.length <= MAX_CV_TEXT_LENGTH) {
-    return text;
-  }
-
-  return `${text.slice(0, MAX_CV_TEXT_LENGTH)}\n\n[Texto truncado para la conversacion]`;
 }

@@ -13,6 +13,8 @@ export const ConversationCopy = {
     'Formato no soportado. Usa PDF, Word (.docx) o TXT, o escribe *omitir* para continuar sin CV.',
   registrationSuccess: (fullName: string, url: string) =>
     `¡Listo, ${fullName}! Tu registro fue creado. Continúa tu perfil aquí:\n${url}`,
+  registrationSuccessWithoutCv: (fullName: string, url: string) =>
+    `¡Listo, ${fullName}! Tu registro fue creado. Continúa tu perfil aquí:\n${url}\n\nNo pudimos adjuntar tu CV automáticamente; podrás completarlo en la conversación de voz.`,
   mainMenuPrompt:
     'Menú principal de TrabajoYa. Elige una opción de la lista.',
   profileLink: (url: string) =>

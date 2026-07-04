@@ -235,32 +235,82 @@ export class ConversationService {
     processingMeta?: Record<string, unknown>,
   ): Promise<ConversationHandleResult> {
     try {
-      const result = await this.trabajoyaService.createIntake({
-        phone: waNumber,
+      return await this.createIntakeAndReply(
+        waNumber,
         fullName,
         cvText,
         cvFileName,
-        cvSource: cvText ? 'whatsapp' : undefined,
-      });
-
-      return {
-        replyText: ConversationCopy.registrationSuccess(fullName, result.url),
-        replyInteractive: buildMainMenuInteractive(
-          ConversationCopy.mainMenuPrompt,
-        ),
-        nextStep: ConversationStep.MENU_MAIN,
-        contextPatch: {
-          fullName,
-          intakeCode: result.code,
-          intakeUrl: result.url,
-          cvFileName,
-          cvSkipped: !cvText,
-        },
         processingMeta,
-      };
+      );
     } catch (error) {
-      return this.handleIntakeError(error);
+      if (!cvText) {
+        return this.handleIntakeError(error, processingMeta);
+      }
+
+      this.logger.warn(
+        `Intake with CV failed for ${waNumber}, retrying without CV: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+
+      try {
+        return await this.createIntakeAndReply(
+          waNumber,
+          fullName,
+          undefined,
+          undefined,
+          {
+            ...(processingMeta ?? {}),
+            cvFallback: true,
+            cvFallbackReason:
+              error instanceof Error ? error.message : String(error),
+          },
+          true,
+        );
+      } catch (retryError) {
+        return this.handleIntakeError(retryError, {
+          ...(processingMeta ?? {}),
+          cvFallbackAttempted: true,
+          cvFallbackReason:
+            error instanceof Error ? error.message : String(error),
+        });
+      }
     }
+  }
+
+  private async createIntakeAndReply(
+    waNumber: string,
+    fullName: string,
+    cvText?: string,
+    cvFileName?: string,
+    processingMeta?: Record<string, unknown>,
+    withoutCv = false,
+  ): Promise<ConversationHandleResult> {
+    const result = await this.trabajoyaService.createIntake({
+      phone: waNumber,
+      fullName,
+      cvText,
+      cvFileName,
+      cvSource: cvText ? 'whatsapp' : undefined,
+    });
+
+    const replyText = withoutCv
+      ? ConversationCopy.registrationSuccessWithoutCv(fullName, result.url)
+      : ConversationCopy.registrationSuccess(fullName, result.url);
+
+    return {
+      replyText,
+      replyInteractive: buildMainMenuInteractive(ConversationCopy.mainMenuPrompt),
+      nextStep: ConversationStep.MENU_MAIN,
+      contextPatch: {
+        fullName,
+        intakeCode: result.code,
+        intakeUrl: result.url,
+        cvFileName: withoutCv ? undefined : cvFileName,
+        cvSkipped: withoutCv || !cvText,
+      },
+      processingMeta,
+    };
   }
 
   private handleMenuCommand(
@@ -309,19 +359,42 @@ export class ConversationService {
     };
   }
 
-  private handleIntakeError(error: unknown): ConversationHandleResult {
+  private handleIntakeError(
+    error: unknown,
+    processingMeta?: Record<string, unknown>,
+  ): ConversationHandleResult {
+    const baseMeta: Record<string, unknown> = {
+      ...(processingMeta ?? {}),
+      step: processingMeta?.step ?? ConversationStep.ASK_CV,
+      result: 'intake_create_failed',
+    };
+
     if (error instanceof TrabajoyaNotConfiguredError) {
       return {
         replyText: ConversationCopy.serviceUnavailable,
         nextStep: ConversationStep.ASK_CV,
+        processingMeta: {
+          ...baseMeta,
+          errorCode: 'trabajoya_not_configured',
+        },
       };
     }
 
     if (error instanceof TrabajoyaApiError) {
-      if (error.publicError === 'invalid_phone') {
+      const meta = {
+        ...baseMeta,
+        trabajoyaStatus: error.statusCode,
+        trabajoyaError: error.publicError ?? error.message,
+      };
+
+      if (
+        error.publicError === 'invalid_phone' ||
+        error.publicError?.includes('telefono de El Salvador')
+      ) {
         return {
           replyText: ConversationCopy.invalidPhone,
           nextStep: ConversationStep.ASK_CV,
+          processingMeta: meta,
         };
       }
 
@@ -330,13 +403,51 @@ export class ConversationService {
         return {
           replyText: ConversationCopy.serviceUnavailable,
           nextStep: ConversationStep.ASK_CV,
+          processingMeta: meta,
         };
       }
+
+      if (
+        error.statusCode === 0 ||
+        error.statusCode >= 500 ||
+        error.publicError?.includes('Postgres')
+      ) {
+        return {
+          replyText: ConversationCopy.serviceUnavailable,
+          nextStep: ConversationStep.ASK_CV,
+          processingMeta: meta,
+        };
+      }
+
+      if (error.publicError && isUserFacingTrabajoyaError(error.publicError)) {
+        return {
+          replyText: error.publicError,
+          nextStep: ConversationStep.ASK_CV,
+          processingMeta: meta,
+        };
+      }
+
+      this.logger.error(
+        `TrabajoYa intake failed: status=${error.statusCode} error=${error.publicError ?? error.message}`,
+      );
+
+      return {
+        replyText: ConversationCopy.registrationFailed,
+        nextStep: ConversationStep.ASK_CV,
+        processingMeta: meta,
+      };
     }
+
+    this.logger.error(`Unexpected intake error: ${String(error)}`);
 
     return {
       replyText: ConversationCopy.registrationFailed,
       nextStep: ConversationStep.ASK_CV,
+      processingMeta: {
+        ...baseMeta,
+        errorCode: 'unexpected_error',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
     };
   }
 }
@@ -366,4 +477,20 @@ function isSkipCvCommand(text: string | undefined): boolean {
 
 function resolveInboundSelection(data: ZavuInboundMessageData): string | undefined {
   return data.listReply?.id ?? data.buttonReply?.id ?? data.text?.trim();
+}
+
+function isUserFacingTrabajoyaError(message: string): boolean {
+  if (message.length > 240) {
+    return false;
+  }
+
+  const blockedPatterns = [
+    /duplicate key/i,
+    /violates/i,
+    /syntax error/i,
+    /invalid response/i,
+    /ECONNREFUSED/i,
+  ];
+
+  return !blockedPatterns.some((pattern) => pattern.test(message));
 }

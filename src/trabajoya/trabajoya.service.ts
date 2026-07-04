@@ -7,6 +7,10 @@ import {
   TrabajoyaApiError,
   TrabajoyaNotConfiguredError,
 } from './trabajoya.types';
+import {
+  sanitizeIntakeCvText,
+  sanitizeIntakeFileName,
+} from './trabajoya-text.util';
 
 @Injectable()
 export class TrabajoyaService implements OnModuleInit {
@@ -49,6 +53,24 @@ export class TrabajoyaService implements OnModuleInit {
 
     const phone = normalizePhoneSV(request.phone);
     const url = `${baseUrl.replace(/\/$/, '')}/api/intakes`;
+    const payload: Record<string, string> = {
+      phone,
+      full_name: request.fullName,
+      source: 'whatsapp',
+    };
+
+    if (request.cvText) {
+      const cvText = sanitizeIntakeCvText(request.cvText);
+      if (cvText) {
+        payload.cv_text = cvText;
+        if (request.cvFileName) {
+          payload.cv_file_name = sanitizeIntakeFileName(request.cvFileName);
+        }
+        if (request.cvSource) {
+          payload.cv_source = request.cvSource;
+        }
+      }
+    }
 
     let response: Response;
     try {
@@ -58,23 +80,30 @@ export class TrabajoyaService implements OnModuleInit {
           'Content-Type': 'application/json',
           'X-Trabajoya-Key': apiKey,
         },
-        body: JSON.stringify({
-          phone,
-          full_name: request.fullName,
-          source: 'whatsapp',
-          ...(request.cvText ? { cv_text: request.cvText } : {}),
-          ...(request.cvFileName ? { cv_file_name: request.cvFileName } : {}),
-          ...(request.cvSource ? { cv_source: request.cvSource } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
     } catch (error) {
       this.logger.error(`TrabajoYa request failed: ${String(error)}`);
       throw new TrabajoyaApiError('Network error contacting TrabajoYa', 0);
     }
 
-    const body = (await response.json()) as
-      | CreateIntakeResponse
-      | CreateIntakeErrorResponse;
+    const rawBody = await response.text();
+    let body: CreateIntakeResponse | CreateIntakeErrorResponse;
+
+    try {
+      body = JSON.parse(rawBody) as
+        | CreateIntakeResponse
+        | CreateIntakeErrorResponse;
+    } catch {
+      this.logger.error(
+        `TrabajoYa returned non-JSON (${response.status}): ${rawBody.slice(0, 500)}`,
+      );
+      throw new TrabajoyaApiError(
+        'Invalid response from TrabajoYa',
+        response.status,
+        'invalid_response',
+      );
+    }
 
     if (!response.ok || !body.ok) {
       const publicError =
