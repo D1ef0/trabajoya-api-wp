@@ -71,4 +71,26 @@ export class AdminController {
       limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
+
+  @Get('request-captures')
+  listRequestCaptures(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('path') path?: string,
+    @Query('method') method?: string,
+    @Query('statusCode') statusCode?: string,
+  ) {
+    return this.adminService.listRequestCaptures({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      path,
+      method,
+      statusCode: statusCode ? parseInt(statusCode, 10) : undefined,
+    });
+  }
+
+  @Get('request-captures/:id')
+  getRequestCapture(@Param('id') id: string) {
+    return this.adminService.getRequestCapture(id);
+  }
 }

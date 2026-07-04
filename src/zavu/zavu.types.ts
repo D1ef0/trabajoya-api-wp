@@ -1,5 +1,8 @@
 export interface ZavuInboundMessageData {
-  id: string;
+  /** Present in real Zavu webhooks */
+  messageId?: string;
+  /** Legacy/test payloads */
+  id?: string;
   from: string;
   to?: string;
   text?: string;
@@ -16,8 +19,18 @@ export interface ZavuInboundMessageData {
 }
 
 export interface ZavuWebhookEvent {
+  id?: string;
   type: string;
+  timestamp?: number;
+  senderId?: string;
+  projectId?: string;
   data: ZavuInboundMessageData;
+}
+
+export function resolveInboundMessageId(
+  data: ZavuInboundMessageData,
+): string | undefined {
+  return data.messageId ?? data.id;
 }
 
 export interface ZavuButton {

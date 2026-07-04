@@ -8,8 +8,11 @@ import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { verifyZavuSignature } from '../zavu/zavu-signature.util';
-import { ZavuWebhookEvent } from '../zavu/zavu.types';
+import { verifyZavuSignatureDetailed } from '../zavu/zavu-signature.util';
+import {
+  resolveInboundMessageId,
+  ZavuWebhookEvent,
+} from '../zavu/zavu.types';
 import {
   CONVERSATION_QUEUE,
   ConversationJobPayload,
@@ -39,11 +42,13 @@ export class WebhookService {
       return;
     }
 
-    const waMessageId = event.data?.id;
+    const waMessageId = event.data
+      ? resolveInboundMessageId(event.data)
+      : undefined;
     const waNumber = event.data?.from;
 
     if (!waMessageId || !waNumber) {
-      this.logger.warn('Inbound webhook missing id or from field');
+      this.logger.warn('Inbound webhook missing messageId or from field');
       return;
     }
 
@@ -84,13 +89,14 @@ export class WebhookService {
       throw new UnauthorizedException('Webhook secret not configured');
     }
 
-    const isValid = verifyZavuSignature(
+    const result = verifyZavuSignatureDetailed(
       rawBody.toString('utf8'),
       signatureHeader,
       secret,
     );
 
-    if (!isValid) {
+    if (!result.valid) {
+      this.logger.warn(`Webhook signature rejected: ${result.reason}`);
       throw new UnauthorizedException('Invalid webhook signature');
     }
   }

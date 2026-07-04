@@ -24,6 +24,8 @@ export class AdminService {
       messagesToday,
       webhooksTotal,
       webhooksToday,
+      requestCapturesTotal,
+      requestCapturesToday,
     ] = await Promise.all([
       this.prisma.conversationSession.count(),
       this.prisma.conversationSession.count({ where: { status: 'active' } }),
@@ -32,6 +34,10 @@ export class AdminService {
       this.prisma.messageLog.count({ where: { createdAt: { gte: today } } }),
       this.prisma.webhookEvent.count(),
       this.prisma.webhookEvent.count({ where: { processedAt: { gte: today } } }),
+      this.prisma.inboundRequestCapture.count(),
+      this.prisma.inboundRequestCapture.count({
+        where: { createdAt: { gte: today } },
+      }),
     ]);
 
     return {
@@ -42,6 +48,8 @@ export class AdminService {
       messagesToday,
       webhooksTotal,
       webhooksToday,
+      requestCapturesTotal,
+      requestCapturesToday,
     };
   }
 
@@ -227,6 +235,59 @@ export class AdminService {
       data: items,
       meta: this.paginationMeta(total, page, limit),
     };
+  }
+
+  async listRequestCaptures(
+    params: PaginationInput & {
+      path?: string;
+      method?: string;
+      statusCode?: number;
+    },
+  ) {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params.limit ?? 30));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.InboundRequestCaptureWhereInput = {};
+
+    if (params.path?.trim()) {
+      where.path = { contains: params.path.trim() };
+    }
+
+    if (params.method?.trim()) {
+      where.method = params.method.trim().toUpperCase();
+    }
+
+    if (params.statusCode !== undefined && !Number.isNaN(params.statusCode)) {
+      where.statusCode = params.statusCode;
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.inboundRequestCapture.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.inboundRequestCapture.count({ where }),
+    ]);
+
+    return {
+      data: items,
+      meta: this.paginationMeta(total, page, limit),
+    };
+  }
+
+  async getRequestCapture(id: string) {
+    const capture = await this.prisma.inboundRequestCapture.findUnique({
+      where: { id },
+    });
+
+    if (!capture) {
+      throw new NotFoundException('Request capture not found');
+    }
+
+    return capture;
   }
 
   private paginationMeta(total: number, page: number, limit: number) {

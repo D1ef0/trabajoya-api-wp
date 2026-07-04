@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../session/session.service';
 import { ZavuService } from '../zavu/zavu.service';
 import {
+  resolveInboundMessageId,
   ZavuInboundMessageData,
   ZavuWebhookEvent,
 } from '../zavu/zavu.types';
@@ -29,6 +30,12 @@ export class ConversationProcessor extends WorkerHost {
     const waNumber = job.data.waNumber;
 
     const session = await this.sessionService.getOrCreate(waNumber);
+    const inboundMessageId = resolveInboundMessageId(data);
+
+    if (!inboundMessageId) {
+      this.logger.warn(`Job ${job.id} missing inbound messageId`);
+      return;
+    }
 
     await this.prisma.messageLog.create({
       data: {
@@ -36,7 +43,7 @@ export class ConversationProcessor extends WorkerHost {
         direction: 'inbound',
         type: this.resolveInboundType(data),
         payload: event as unknown as Prisma.InputJsonValue,
-        waMessageId: data.id,
+        waMessageId: inboundMessageId,
       },
     });
 
@@ -44,7 +51,7 @@ export class ConversationProcessor extends WorkerHost {
     const sendResult = await this.zavuService.sendText(
       waNumber,
       replyText,
-      `echo-${data.id}`,
+      `echo-${inboundMessageId}`,
     );
 
     await this.prisma.messageLog.create({
@@ -62,7 +69,9 @@ export class ConversationProcessor extends WorkerHost {
 
     await this.sessionService.touch(session.id);
 
-    this.logger.log(`Processed inbound message ${data.id} from ${waNumber}`);
+    this.logger.log(
+      `Processed inbound message ${inboundMessageId} from ${waNumber}`,
+    );
   }
 
   private resolveInboundType(data: ZavuInboundMessageData): string {

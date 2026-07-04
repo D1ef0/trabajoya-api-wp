@@ -4,7 +4,7 @@ const secret = 'whsec_test_local';
 const body = JSON.stringify({
   type: 'message.inbound',
   data: {
-    id: 'msg_sig_001',
+    messageId: 'msg_sig_001',
     from: '+5215599999999',
     text: 'test firma',
   },
@@ -42,7 +42,7 @@ console.log('invalid signature (expect 401 when skip=false):', invalid);
 const buttonBody = JSON.stringify({
   type: 'message.inbound',
   data: {
-    id: 'msg_button_001',
+    messageId: 'msg_button_001',
     from: '+5215511111111',
     buttonReply: { id: 'ventas', title: 'Ventas' },
   },

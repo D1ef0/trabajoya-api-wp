@@ -2,13 +2,27 @@ import { createHmac, timingSafeEqual } from 'crypto';
 
 const MAX_AGE_SECONDS = 300;
 
+export type ZavuSignatureFailureReason =
+  | 'missing_header'
+  | 'malformed_header'
+  | 'timestamp_expired'
+  | 'mismatch';
+
 export function verifyZavuSignature(
   rawBody: string,
   signatureHeader: string | undefined,
   secret: string,
 ): boolean {
+  return verifyZavuSignatureDetailed(rawBody, signatureHeader, secret).valid;
+}
+
+export function verifyZavuSignatureDetailed(
+  rawBody: string,
+  signatureHeader: string | undefined,
+  secret: string,
+): { valid: true } | { valid: false; reason: ZavuSignatureFailureReason } {
   if (!signatureHeader) {
-    return false;
+    return { valid: false, reason: 'missing_header' };
   }
 
   const parts = signatureHeader.split(',');
@@ -16,7 +30,7 @@ export function verifyZavuSignature(
   const signaturePart = parts.find((part) => part.startsWith('v1='));
 
   if (!timestampPart || !signaturePart) {
-    return false;
+    return { valid: false, reason: 'malformed_header' };
   }
 
   const timestamp = parseInt(timestampPart.slice(2), 10);
@@ -24,7 +38,7 @@ export function verifyZavuSignature(
   const now = Math.floor(Date.now() / 1000);
 
   if (Number.isNaN(timestamp) || now - timestamp > MAX_AGE_SECONDS) {
-    return false;
+    return { valid: false, reason: 'timestamp_expired' };
   }
 
   const signedPayload = `${timestamp}.${rawBody}`;
@@ -33,11 +47,12 @@ export function verifyZavuSignature(
     .digest('hex');
 
   try {
-    return timingSafeEqual(
+    const valid = timingSafeEqual(
       Buffer.from(expectedSignature),
       Buffer.from(signature),
     );
+    return valid ? { valid: true } : { valid: false, reason: 'mismatch' };
   } catch {
-    return false;
+    return { valid: false, reason: 'mismatch' };
   }
 }

@@ -7,6 +7,7 @@ import { AdminModule } from './admin/admin.module';
 import configuration from './common/config/configuration';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RequestCaptureModule } from './request-capture/request-capture.module';
 import { WebhookModule } from './webhook/webhook.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { WebhookModule } from './webhook/webhook.module';
       exclude: ['/admin/api*'],
     }),
     PrismaModule,
+    RequestCaptureModule,
     WebhookModule,
     HealthModule,
     AdminModule,
