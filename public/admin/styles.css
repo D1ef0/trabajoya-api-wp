@@ -473,7 +473,8 @@ dialog::backdrop {
   overflow: auto;
 }
 
-#request-dialog {
+#request-dialog,
+#webhook-dialog {
   width: min(900px, calc(100vw - 32px));
 }
 

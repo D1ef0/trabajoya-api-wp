@@ -72,6 +72,11 @@ export class AdminController {
     });
   }
 
+  @Get('webhook-events/:id')
+  getWebhookEvent(@Param('id') id: string) {
+    return this.adminService.getWebhookEvent(id);
+  }
+
   @Get('request-captures')
   listRequestCaptures(
     @Query('page') page?: string,

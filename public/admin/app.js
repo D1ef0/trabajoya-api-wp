@@ -52,6 +52,11 @@ const els = {
   requestDialogMeta: document.getElementById('request-dialog-meta'),
   requestDialogBody: document.getElementById('request-dialog-body'),
   requestDialogClose: document.getElementById('request-dialog-close'),
+  webhookDialog: document.getElementById('webhook-dialog'),
+  webhookDialogTitle: document.getElementById('webhook-dialog-title'),
+  webhookDialogMeta: document.getElementById('webhook-dialog-meta'),
+  webhookDialogBody: document.getElementById('webhook-dialog-body'),
+  webhookDialogClose: document.getElementById('webhook-dialog-close'),
   sessionDialog: document.getElementById('session-dialog'),
   dialogTitle: document.getElementById('dialog-title'),
   dialogMeta: document.getElementById('dialog-meta'),
@@ -401,12 +406,16 @@ async function loadWebhooks() {
   els.webhooksTable.innerHTML = result.data
     .map(
       (event) => `
-      <tr>
-        <td><code>${event.waMessageId}</code></td>
+      <tr data-id="${event.id}">
+        <td><code>${escapeHtml(event.waMessageId)}</code></td>
         <td>${formatDate(event.processedAt)}</td>
       </tr>`,
     )
     .join('');
+
+  els.webhooksTable.querySelectorAll('tr').forEach((row) => {
+    row.addEventListener('click', () => openWebhookEvent(row.dataset.id ?? ''));
+  });
 
   renderPagination(
     els.webhooksPagination,
@@ -417,6 +426,88 @@ async function loadWebhooks() {
       loadWebhooks();
     },
   );
+}
+
+function renderDetailBlock(title, content) {
+  return `
+    <section class="detail-block">
+      <h4>${escapeHtml(title)}</h4>
+      <pre class="context-box">${escapeHtml(content)}</pre>
+    </section>`;
+}
+
+async function openWebhookEvent(id) {
+  const event = await api(`/webhook-events/${id}`);
+
+  els.webhookDialogTitle.textContent = event.waMessageId;
+  els.webhookDialogMeta.textContent = [
+    formatDate(event.processedAt),
+    event.inboundMessage?.session?.waNumber
+      ? `De ${event.inboundMessage.session.waNumber}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const sections = [
+    renderDetailBlock(
+      'Qué guarda esta tabla',
+      'webhook_events solo registra el WA Message ID y la fecha para evitar procesar el mismo evento dos veces (idempotencia). El payload completo se guarda en messages_log al procesar el mensaje.',
+    ),
+  ];
+
+  if (event.inboundMessage) {
+    sections.push(
+      renderDetailBlock(
+        `Mensaje procesado (${event.inboundMessage.type})`,
+        `${event.inboundMessage.preview}\n\n${formatJson(event.inboundMessage.payload)}`,
+      ),
+    );
+
+    if (event.inboundMessage.session) {
+      sections.push(
+        renderDetailBlock(
+          'Sesión',
+          formatJson(event.inboundMessage.session),
+        ),
+      );
+    }
+  } else {
+    sections.push(
+      renderDetailBlock(
+        'Mensaje procesado',
+        'No hay mensaje inbound asociado todavía. Puede estar en cola, haber fallado, o ser un evento que se ignoró antes de encolar.',
+      ),
+    );
+  }
+
+  if (event.outboundReply) {
+    sections.push(
+      renderDetailBlock(
+        `Respuesta enviada (${event.outboundReply.type})`,
+        `${event.outboundReply.preview}\n\n${formatJson(event.outboundReply.payload)}`,
+      ),
+    );
+  }
+
+  if (event.rawRequest) {
+    sections.push(
+      renderDetailBlock(
+        'Request HTTP original',
+        formatJson({
+          method: event.rawRequest.method,
+          path: event.rawRequest.path,
+          statusCode: event.rawRequest.statusCode,
+          durationMs: event.rawRequest.durationMs,
+          headers: event.rawRequest.headers,
+          body: event.rawRequest.body,
+        }),
+      ),
+    );
+  }
+
+  els.webhookDialogBody.innerHTML = sections.join('');
+  els.webhookDialog.showModal();
 }
 
 async function loadRequests() {
@@ -504,7 +595,7 @@ const viewMeta = {
   sessions: ['Conversaciones', 'Sesiones activas y recientes'],
   messages: ['Mensajes', 'Log completo inbound/outbound'],
   funnel: ['Embudo', 'Distribución por paso del flujo'],
-  webhooks: ['Webhooks', 'Eventos procesados (idempotencia)'],
+  webhooks: ['Webhooks', 'Eventos recibidos — clic para ver payload'],
   requests: ['Requests', 'Log de requests HTTP entrantes'],
 };
 
@@ -567,6 +658,9 @@ async function bootstrap() {
   els.dialogClose.addEventListener('click', () => els.sessionDialog.close());
   els.requestDialogClose.addEventListener('click', () =>
     els.requestDialog.close(),
+  );
+  els.webhookDialogClose.addEventListener('click', () =>
+    els.webhookDialog.close(),
   );
 
   let searchTimer;

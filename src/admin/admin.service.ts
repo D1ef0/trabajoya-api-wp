@@ -237,6 +237,100 @@ export class AdminService {
     };
   }
 
+  async getWebhookEvent(id: string) {
+    const event = await this.prisma.webhookEvent.findUnique({
+      where: { id },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Webhook event not found');
+    }
+
+    const inboundMessage = await this.prisma.messageLog.findFirst({
+      where: {
+        waMessageId: event.waMessageId,
+        direction: 'inbound',
+      },
+      include: {
+        session: {
+          select: {
+            waNumber: true,
+            currentStep: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    const outboundReply = inboundMessage
+      ? await this.prisma.messageLog.findFirst({
+          where: {
+            sessionId: inboundMessage.sessionId,
+            direction: 'outbound',
+            createdAt: { gte: inboundMessage.createdAt },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+      : null;
+
+    const rawRequest = await this.prisma.inboundRequestCapture.findFirst({
+      where: {
+        path: { contains: '/webhooks/zavu' },
+        body: { contains: event.waMessageId },
+        createdAt: {
+          gte: new Date(event.processedAt.getTime() - 5000),
+          lte: new Date(event.processedAt.getTime() + 5000),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      id: event.id,
+      waMessageId: event.waMessageId,
+      processedAt: event.processedAt,
+      inboundMessage: inboundMessage
+        ? {
+            id: inboundMessage.id,
+            type: inboundMessage.type,
+            createdAt: inboundMessage.createdAt,
+            preview: extractMessagePreview(
+              inboundMessage.payload,
+              'inbound',
+              inboundMessage.type,
+            ),
+            payload: inboundMessage.payload,
+            session: inboundMessage.session,
+          }
+        : null,
+      outboundReply: outboundReply
+        ? {
+            id: outboundReply.id,
+            type: outboundReply.type,
+            createdAt: outboundReply.createdAt,
+            preview: extractMessagePreview(
+              outboundReply.payload,
+              'outbound',
+              outboundReply.type,
+            ),
+            payload: outboundReply.payload,
+          }
+        : null,
+      rawRequest: rawRequest
+        ? {
+            id: rawRequest.id,
+            method: rawRequest.method,
+            path: rawRequest.path,
+            statusCode: rawRequest.statusCode,
+            durationMs: rawRequest.durationMs,
+            body: rawRequest.body,
+            headers: rawRequest.headers,
+            createdAt: rawRequest.createdAt,
+          }
+        : null,
+    };
+  }
+
   async listRequestCaptures(
     params: PaginationInput & {
       path?: string;
