@@ -13,5 +13,8 @@ export default () => ({
     skipSignatureVerification:
       process.env.ZAVU_SKIP_SIGNATURE_VERIFICATION === 'true',
   },
-  adminApiKey: process.env.ADMIN_API_KEY,
+  auth: {
+    jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+  },
 });

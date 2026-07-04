@@ -45,7 +45,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: sh -c "./node_modules/.bin/prisma migrate deploy && node dist/main.js"
+    command: sh -c "./node_modules/.bin/prisma migrate deploy && node prisma/seed.mjs && node dist/main.js"
 
 volumes:
   postgres_data:
