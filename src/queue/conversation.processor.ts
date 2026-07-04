@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { Prisma } from '@prisma/client';
+import { ConversationService } from '../conversation/conversation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from '../session/session.service';
 import { ZavuService } from '../zavu/zavu.service';
@@ -20,6 +21,7 @@ export class ConversationProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly sessionService: SessionService,
     private readonly zavuService: ZavuService,
+    private readonly conversationService: ConversationService,
   ) {
     super();
   }
@@ -47,11 +49,16 @@ export class ConversationProcessor extends WorkerHost {
       },
     });
 
-    const replyText = this.buildEchoReply(data);
+    const result = await this.conversationService.handle(
+      session,
+      data,
+      waNumber,
+    );
+
     const sendResult = await this.zavuService.sendText(
       waNumber,
-      replyText,
-      `echo-${inboundMessageId}`,
+      result.replyText,
+      `reply-${inboundMessageId}`,
     );
 
     await this.prisma.messageLog.create({
@@ -60,17 +67,24 @@ export class ConversationProcessor extends WorkerHost {
         direction: 'outbound',
         type: 'text',
         payload: {
-          text: replyText,
+          text: result.replyText,
           zavuResponse: sendResult,
         } as Prisma.InputJsonValue,
         waMessageId: this.extractOutboundMessageId(sendResult),
       },
     });
 
-    await this.sessionService.touch(session.id);
+    await this.sessionService.advance(session.id, {
+      ...(result.nextStep !== undefined
+        ? { currentStep: result.nextStep }
+        : {}),
+      ...(result.contextPatch !== undefined
+        ? { context: result.contextPatch as Record<string, unknown> }
+        : {}),
+    });
 
     this.logger.log(
-      `Processed inbound message ${inboundMessageId} from ${waNumber}`,
+      `Processed inbound message ${inboundMessageId} from ${waNumber} (step: ${result.nextStep ?? session.currentStep})`,
     );
   }
 
@@ -82,23 +96,6 @@ export class ConversationProcessor extends WorkerHost {
       return 'list_reply';
     }
     return data.messageType ?? 'text';
-  }
-
-  private buildEchoReply(data: ZavuInboundMessageData): string {
-    if (data.buttonReply) {
-      return `Recibí tu selección: ${data.buttonReply.title} (${data.buttonReply.id})`;
-    }
-
-    if (data.listReply) {
-      return `Recibí tu selección: ${data.listReply.title} (${data.listReply.id})`;
-    }
-
-    const text = data.text?.trim();
-    if (text) {
-      return `Recibí: ${text}`;
-    }
-
-    return 'Recibí tu mensaje.';
   }
 
   private extractOutboundMessageId(sendResult: unknown): string | undefined {

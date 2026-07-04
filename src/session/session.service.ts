@@ -24,6 +24,39 @@ export class SessionService {
     });
   }
 
+  async advance(
+    sessionId: string,
+    update: {
+      currentStep?: string;
+      context?: Record<string, unknown>;
+    },
+  ): Promise<ConversationSession> {
+    const session = await this.prisma.conversationSession.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+
+    const existingContext =
+      session.context && typeof session.context === 'object' && !Array.isArray(session.context)
+        ? (session.context as Record<string, unknown>)
+        : {};
+
+    const mergedContext =
+      update.context !== undefined
+        ? { ...existingContext, ...update.context }
+        : existingContext;
+
+    return this.prisma.conversationSession.update({
+      where: { id: sessionId },
+      data: {
+        lastMessageAt: new Date(),
+        ...(update.currentStep !== undefined
+          ? { currentStep: update.currentStep }
+          : {}),
+        context: mergedContext as Prisma.InputJsonValue,
+      },
+    });
+  }
+
   findByWaNumber(waNumber: string) {
     return this.prisma.conversationSession.findUnique({
       where: { waNumber },

@@ -17,4 +17,10 @@ export default () => ({
     jwtSecret: process.env.JWT_SECRET ?? 'dev-secret-change-me',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   },
+  trabajoya: {
+    baseUrl:
+      process.env.TRABAJOYA_API_BASE_URL ??
+      'https://trabajoya.rivasystems.dev',
+    intakeApiKey: process.env.TRABAJOYA_INTAKE_API_KEY,
+  },
 });

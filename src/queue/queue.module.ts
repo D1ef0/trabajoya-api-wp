@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConversationModule } from '../conversation/conversation.module';
 import { SessionModule } from '../session/session.module';
 import { ZavuModule } from '../zavu/zavu.module';
 import { ConversationProcessor } from './conversation.processor';
@@ -22,6 +23,7 @@ import { CONVERSATION_QUEUE } from './queue.constants';
     BullModule.registerQueue({ name: CONVERSATION_QUEUE }),
     SessionModule,
     ZavuModule,
+    ConversationModule,
   ],
   providers: [ConversationProcessor],
   exports: [BullModule],
