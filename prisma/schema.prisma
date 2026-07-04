@@ -45,6 +45,7 @@ model MessageLog {
 
   session ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+  @@unique([waMessageId, direction])
   @@index([sessionId])
   @@index([waMessageId])
   @@map("messages_log")
