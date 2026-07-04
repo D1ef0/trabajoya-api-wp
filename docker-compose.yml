@@ -40,6 +40,8 @@ services:
       ZAVUDEV_API_KEY: ${ZAVUDEV_API_KEY}
       ZAVU_WEBHOOK_SECRET: ${ZAVU_WEBHOOK_SECRET}
       ZAVU_SKIP_SIGNATURE_VERIFICATION: ${ZAVU_SKIP_SIGNATURE_VERIFICATION:-false}
+      TRABAJOYA_API_BASE_URL: ${TRABAJOYA_API_BASE_URL:-https://trabajoya.rivasystems.dev}
+      TRABAJOYA_INTAKE_API_KEY: ${TRABAJOYA_INTAKE_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

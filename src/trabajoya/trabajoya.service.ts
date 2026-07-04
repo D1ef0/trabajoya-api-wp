@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   CreateIntakeErrorResponse,
@@ -9,10 +9,23 @@ import {
 } from './trabajoya.types';
 
 @Injectable()
-export class TrabajoyaService {
+export class TrabajoyaService implements OnModuleInit {
   private readonly logger = new Logger(TrabajoyaService.name);
 
   constructor(private readonly config: ConfigService) {}
+
+  onModuleInit() {
+    if (this.isConfigured()) {
+      this.logger.log(
+        `TrabajoYa intake client configured (${this.config.get<string>('trabajoya.baseUrl')})`,
+      );
+      return;
+    }
+
+    this.logger.warn(
+      'TRABAJOYA_INTAKE_API_KEY or TRABAJOYA_API_BASE_URL not set — intake creation disabled',
+    );
+  }
 
   isConfigured(): boolean {
     return Boolean(
@@ -28,7 +41,9 @@ export class TrabajoyaService {
     const baseUrl = this.config.get<string>('trabajoya.baseUrl');
 
     if (!apiKey || !baseUrl) {
-      this.logger.warn('TRABAJOYA_INTAKE_API_KEY not set — intake creation disabled');
+      this.logger.warn(
+        `TrabajoYa intake skipped: baseUrl=${baseUrl ? 'set' : 'missing'}, apiKey=${apiKey ? 'set' : 'missing'}`,
+      );
       throw new TrabajoyaNotConfiguredError();
     }
 
