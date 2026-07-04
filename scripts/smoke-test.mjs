@@ -11,9 +11,7 @@ const body = JSON.stringify({
 });
 
 const timestamp = Math.floor(Date.now() / 1000);
-const signature = createHmac('sha256', secret)
-  .update(`${timestamp}.${body}`)
-  .digest('hex');
+const signature = createHmac('sha256', secret).update(body).digest('hex');
 
 const headers = {
   'Content-Type': 'application/json',

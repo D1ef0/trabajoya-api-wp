@@ -16,9 +16,7 @@ if (!bodyPath) {
 
 const body = readFileSync(bodyPath, 'utf8').trim();
 const timestamp = Math.floor(Date.now() / 1000);
-const signature = createHmac('sha256', secret)
-  .update(`${timestamp}.${body}`)
-  .digest('hex');
+const signature = createHmac('sha256', secret).update(body).digest('hex');
 
 console.log('Body bytes:', Buffer.byteLength(body, 'utf8'));
 console.log('X-Zavu-Signature:', `t=${timestamp},v1=${signature}`);

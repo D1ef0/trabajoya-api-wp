@@ -17,7 +17,7 @@ function verifyZavuSignature(rawBody, signatureHeader, secret) {
   const now = Math.floor(Date.now() / 1000);
   if (Number.isNaN(timestamp) || now - timestamp > MAX_AGE_SECONDS) return false;
   const expectedSignature = createHmac('sha256', secret)
-    .update(`${timestamp}.${rawBody}`)
+    .update(rawBody)
     .digest('hex');
   try {
     return expectedSignature === signature;
@@ -29,7 +29,7 @@ function verifyZavuSignature(rawBody, signatureHeader, secret) {
 const secret = 'whsec_test_local';
 const body = '{"type":"message.inbound","data":{"id":"x","from":"+1","text":"hi"}}';
 const t = Math.floor(Date.now() / 1000);
-const sig = createHmac('sha256', secret).update(`${t}.${body}`).digest('hex');
+const sig = createHmac('sha256', secret).update(body).digest('hex');
 const header = `t=${t},v1=${sig}`;
 
 console.log('valid signature:', verifyZavuSignature(body, header, secret));

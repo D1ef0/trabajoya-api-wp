@@ -41,9 +41,11 @@ export function verifyZavuSignatureDetailed(
     return { valid: false, reason: 'timestamp_expired' };
   }
 
-  const signedPayload = `${timestamp}.${rawBody}`;
+  // Zavu signs the raw body only; `t=` is not part of the HMAC input, it's
+  // just used above for the replay-window check. Confirmed against live
+  // payloads — Zavu's own docs incorrectly claim `${timestamp}.${rawBody}`.
   const expectedSignature = createHmac('sha256', secret)
-    .update(signedPayload)
+    .update(rawBody)
     .digest('hex');
 
   try {
