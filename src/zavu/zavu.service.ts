@@ -1,7 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Zavudev from '@zavudev/sdk';
-import { SendInteractiveParams } from './zavu.types';
+import {
+  buildInboundMediaDebug,
+  normalizeZavuInboundData,
+} from './zavu-inbound.util';
+import {
+  resolveInboundMessageId,
+  SendInteractiveParams,
+  ZavuInboundMessageData,
+} from './zavu.types';
+
+const MEDIA_RESOLVE_ATTEMPTS = 3;
+const MEDIA_RESOLVE_DELAY_MS = 1000;
+
+export interface ResolvedInboundMedia {
+  url?: string;
+  filename?: string;
+  mimeType?: string;
+  debug: Record<string, unknown>;
+}
 
 @Injectable()
 export class ZavuService {
@@ -67,4 +85,74 @@ export class ZavuService {
       idempotencyKey,
     });
   }
+
+  async resolveInboundMedia(
+    data: ZavuInboundMessageData,
+  ): Promise<ResolvedInboundMedia> {
+    const normalized = normalizeZavuInboundData(data);
+    const debug = buildInboundMediaDebug(data);
+
+    if (normalized.mediaUrl) {
+      return {
+        url: normalized.mediaUrl,
+        filename: normalized.filename,
+        mimeType: normalized.mimeType,
+        debug: { ...debug, mediaSource: 'webhook_media_url' },
+      };
+    }
+
+    const messageId = resolveInboundMessageId(normalized);
+    if (!messageId || !this.client) {
+      return {
+        debug: {
+          ...debug,
+          mediaSource: 'none',
+          reason: messageId ? 'zavu_client_not_configured' : 'missing_message_id',
+        },
+      };
+    }
+
+    for (let attempt = 1; attempt <= MEDIA_RESOLVE_ATTEMPTS; attempt++) {
+      try {
+        const response = await this.client.messages.retrieve(messageId);
+        const message = response.message;
+        const url = message.content?.mediaUrl;
+        if (url) {
+          return {
+            url,
+            filename: message.content?.filename ?? normalized.filename,
+            mimeType: message.content?.mimeType ?? normalized.mimeType,
+            debug: {
+              ...debug,
+              mediaSource: 'zavu_retrieve',
+              attempt,
+            },
+          };
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to retrieve message ${messageId} for media (attempt ${attempt}): ${String(error)}`,
+        );
+      }
+
+      if (attempt < MEDIA_RESOLVE_ATTEMPTS) {
+        await sleep(MEDIA_RESOLVE_DELAY_MS);
+      }
+    }
+
+    return {
+      debug: {
+        ...debug,
+        mediaSource: 'none',
+        reason: 'media_url_not_ready',
+        mediaId: normalized.mediaId ?? null,
+        messageId,
+        attempts: MEDIA_RESOLVE_ATTEMPTS,
+      },
+    };
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

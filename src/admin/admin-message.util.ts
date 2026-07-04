@@ -36,6 +36,25 @@ export function extractMessagePreview(
     return `[Lista] ${listReply.title}`;
   }
 
+  if (typeof data.messageType === 'string' && data.messageType !== 'text') {
+    const content =
+      data.content && typeof data.content === 'object'
+        ? (data.content as Record<string, unknown>)
+        : undefined;
+    const filename =
+      typeof data.filename === 'string'
+        ? data.filename
+        : typeof content?.filename === 'string'
+          ? content.filename
+          : undefined;
+
+    if (filename) {
+      return `[${data.messageType}] ${filename}`;
+    }
+
+    return `[${data.messageType}]`;
+  }
+
   if (type === 'button_reply') return '[Respuesta botón]';
   if (type === 'list_reply') return '[Respuesta lista]';
 

@@ -21,6 +21,18 @@ export interface ZavuInboundMessageData {
   mimeType?: string;
   filename?: string;
   caption?: string;
+  content?: {
+    mediaId?: string;
+    mediaUrl?: string;
+    mimeType?: string;
+    filename?: string;
+    interactiveReply?: {
+      type?: string;
+      id?: string;
+      title?: string;
+      description?: string;
+    };
+  };
 }
 
 export interface ZavuWebhookEvent {

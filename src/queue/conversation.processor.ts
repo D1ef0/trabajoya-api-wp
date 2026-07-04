@@ -148,6 +148,9 @@ export class ConversationProcessor extends WorkerHost {
             text: result.replyText,
             inReplyTo: inboundMessageId,
             zavuResponse: sendResult,
+            ...(result.processingMeta
+              ? { processing: result.processingMeta }
+              : {}),
           } as Prisma.InputJsonValue,
           waMessageId: this.extractOutboundMessageId(sendResult),
         },

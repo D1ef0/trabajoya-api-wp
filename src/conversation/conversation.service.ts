@@ -7,6 +7,8 @@ import {
   TrabajoyaApiError,
   TrabajoyaNotConfiguredError,
 } from '../trabajoya/trabajoya.types';
+import { buildInboundMediaDebug, isDocumentInbound } from '../zavu/zavu-inbound.util';
+import { ZavuService } from '../zavu/zavu.service';
 import { ZavuInboundMessageData } from '../zavu/zavu.types';
 import { ConversationCopy } from './conversation.copy';
 import {
@@ -27,6 +29,7 @@ export class ConversationService {
   constructor(
     private readonly trabajoyaService: TrabajoyaService,
     private readonly cvParserService: CvParserService,
+    private readonly zavuService: ZavuService,
   ) {}
 
   async handle(
@@ -124,26 +127,41 @@ export class ConversationService {
       };
     }
 
-    if (!isDocumentMessage(data)) {
+    if (!isDocumentInbound(data)) {
       return {
         replyText: ConversationCopy.invalidCv,
         nextStep: ConversationStep.ASK_CV,
+        processingMeta: {
+          step: ConversationStep.ASK_CV,
+          result: 'invalid_cv_input',
+          inbound: buildInboundMediaDebug(data),
+        },
       };
     }
 
-    const mediaUrl = data.mediaUrl;
-    if (!mediaUrl) {
+    const media = await this.zavuService.resolveInboundMedia(data);
+    if (!media.url) {
+      this.logger.warn(
+        `CV media unresolved for ${waNumber}: ${JSON.stringify(media.debug)}`,
+      );
+
       return {
         replyText: ConversationCopy.cvParseFailed,
         nextStep: ConversationStep.ASK_CV,
+        processingMeta: {
+          step: ConversationStep.ASK_CV,
+          result: 'missing_media_url',
+          inbound: buildInboundMediaDebug(data),
+          media: media.debug,
+        },
       };
     }
 
     try {
       const parsed = await this.cvParserService.convertFromUrl(
-        mediaUrl,
-        data.filename,
-        data.mimeType,
+        media.url,
+        media.filename,
+        media.mimeType,
       );
 
       return this.completeRegistration(
@@ -151,19 +169,46 @@ export class ConversationService {
         fullName,
         parsed.text,
         parsed.fileName,
+        {
+          step: ConversationStep.ASK_CV,
+          result: 'cv_parsed',
+          inbound: buildInboundMediaDebug(data),
+          media: media.debug,
+          cvFileName: parsed.fileName,
+          cvTextLength: parsed.text.length,
+        },
       );
     } catch (error) {
       if (error instanceof CvParseError) {
+        this.logger.warn(
+          `CV parse failed for ${waNumber} (${error.code}): ${error.message}`,
+        );
+
         if (error.code === 'unsupported_format') {
           return {
             replyText: ConversationCopy.cvUnsupportedFormat,
             nextStep: ConversationStep.ASK_CV,
+            processingMeta: {
+              step: ConversationStep.ASK_CV,
+              result: 'unsupported_format',
+              errorCode: error.code,
+              inbound: buildInboundMediaDebug(data),
+              media: media.debug,
+            },
           };
         }
 
         return {
           replyText: ConversationCopy.cvParseFailed,
           nextStep: ConversationStep.ASK_CV,
+          processingMeta: {
+            step: ConversationStep.ASK_CV,
+            result: 'cv_parse_failed',
+            errorCode: error.code,
+            errorMessage: error.message,
+            inbound: buildInboundMediaDebug(data),
+            media: media.debug,
+          },
         };
       }
 
@@ -171,6 +216,13 @@ export class ConversationService {
       return {
         replyText: ConversationCopy.cvParseFailed,
         nextStep: ConversationStep.ASK_CV,
+        processingMeta: {
+          step: ConversationStep.ASK_CV,
+          result: 'cv_parse_failed',
+          errorCode: 'unexpected_error',
+          inbound: buildInboundMediaDebug(data),
+          media: media.debug,
+        },
       };
     }
   }
@@ -180,6 +232,7 @@ export class ConversationService {
     fullName: string,
     cvText?: string,
     cvFileName?: string,
+    processingMeta?: Record<string, unknown>,
   ): Promise<ConversationHandleResult> {
     try {
       const result = await this.trabajoyaService.createIntake({
@@ -203,6 +256,7 @@ export class ConversationService {
           cvFileName,
           cvSkipped: !cvText,
         },
+        processingMeta,
       };
     } catch (error) {
       return this.handleIntakeError(error);
@@ -308,14 +362,6 @@ function isResetCommand(value: string | undefined): boolean {
 function isSkipCvCommand(text: string | undefined): boolean {
   const normalized = text?.trim().toLowerCase();
   return normalized === 'omitir' || normalized === 'omitir cv' || normalized === 'skip';
-}
-
-function isDocumentMessage(data: ZavuInboundMessageData): boolean {
-  if (data.messageType === 'document') {
-    return true;
-  }
-
-  return Boolean(data.mediaUrl && data.messageType !== 'image');
 }
 
 function resolveInboundSelection(data: ZavuInboundMessageData): string | undefined {

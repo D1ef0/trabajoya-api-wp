@@ -32,6 +32,9 @@ export class CvParserService {
     }
 
     if (!response.ok) {
+      this.logger.error(
+        `CV download failed (${response.status}) for ${fileName ?? url}`,
+      );
       throw new CvParseError(
         `CV download failed with status ${response.status}`,
         'download_failed',

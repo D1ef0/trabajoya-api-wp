@@ -14,6 +14,7 @@ export interface ConversationHandleResult {
   nextStep?: string;
   contextPatch?: ConversationContext;
   resetSession?: boolean;
+  processingMeta?: Record<string, unknown>;
 }
 
 export function parseConversationContext(
