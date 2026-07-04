@@ -57,6 +57,21 @@ export class SessionService {
     });
   }
 
+  reset(
+    sessionId: string,
+    nextStep = 'MENU_ROOT',
+  ): Promise<ConversationSession> {
+    return this.prisma.conversationSession.update({
+      where: { id: sessionId },
+      data: {
+        currentStep: nextStep,
+        context: {},
+        lastMessageAt: new Date(),
+        status: 'active',
+      },
+    });
+  }
+
   findByWaNumber(waNumber: string) {
     return this.prisma.conversationSession.findUnique({
       where: { waNumber },

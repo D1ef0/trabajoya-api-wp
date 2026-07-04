@@ -62,6 +62,9 @@ export class TrabajoyaService implements OnModuleInit {
           phone,
           full_name: request.fullName,
           source: 'whatsapp',
+          ...(request.cvText ? { cv_text: request.cvText } : {}),
+          ...(request.cvFileName ? { cv_file_name: request.cvFileName } : {}),
+          ...(request.cvSource ? { cv_source: request.cvSource } : {}),
         }),
       });
     } catch (error) {

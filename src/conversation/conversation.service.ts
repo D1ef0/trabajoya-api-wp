@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConversationSession } from '@prisma/client';
+import { CvParseError } from '../cv-parser/cv-parser.types';
+import { CvParserService } from '../cv-parser/cv-parser.service';
 import { TrabajoyaService } from '../trabajoya/trabajoya.service';
 import {
   TrabajoyaApiError,
@@ -7,8 +9,13 @@ import {
 } from '../trabajoya/trabajoya.types';
 import { ZavuInboundMessageData } from '../zavu/zavu.types';
 import { ConversationCopy } from './conversation.copy';
-import { ConversationStep } from './conversation.constants';
 import {
+  ConversationStep,
+  MenuOption,
+} from './conversation.constants';
+import { buildMainMenuInteractive } from './conversation.menu';
+import {
+  ConversationContext,
   ConversationHandleResult,
   parseConversationContext,
 } from './conversation.types';
@@ -17,7 +24,10 @@ import {
 export class ConversationService {
   private readonly logger = new Logger(ConversationService.name);
 
-  constructor(private readonly trabajoyaService: TrabajoyaService) {}
+  constructor(
+    private readonly trabajoyaService: TrabajoyaService,
+    private readonly cvParserService: CvParserService,
+  ) {}
 
   async handle(
     session: ConversationSession,
@@ -25,16 +35,34 @@ export class ConversationService {
     waNumber: string,
   ): Promise<ConversationHandleResult> {
     const context = parseConversationContext(session.context);
+    const inbound = resolveInboundSelection(data);
+
+    if (isResetCommand(inbound)) {
+      return this.handleReset();
+    }
+
+    if (isMenuCommand(inbound)) {
+      return this.handleMenuCommand(session.currentStep, context);
+    }
+
+    if (inbound === MenuOption.RESET) {
+      return this.handleReset();
+    }
+
+    if (inbound === MenuOption.PROFILE && context.intakeUrl) {
+      return this.showProfileLink(context);
+    }
 
     switch (session.currentStep) {
       case ConversationStep.MENU_ROOT:
         return this.handleMenuRoot();
       case ConversationStep.ASK_FULL_NAME:
-        return this.handleAskFullName(data, waNumber);
+        return this.handleAskFullName(data);
+      case ConversationStep.ASK_CV:
+        return this.handleAskCv(data, context, waNumber);
       case ConversationStep.INTAKE_REGISTERED:
-        return this.handleIntakeRegistered(data, context);
       case ConversationStep.MENU_MAIN:
-        return this.handleMenuMain();
+        return this.showMainMenu(context);
       default:
         this.logger.warn(
           `Unknown step "${session.currentStep}" for session ${session.id}, resetting to MENU_ROOT`,
@@ -50,10 +78,9 @@ export class ConversationService {
     };
   }
 
-  private async handleAskFullName(
+  private handleAskFullName(
     data: ZavuInboundMessageData,
-    waNumber: string,
-  ): Promise<ConversationHandleResult> {
+  ): ConversationHandleResult {
     if (data.buttonReply || data.listReply) {
       return {
         replyText: ConversationCopy.invalidName,
@@ -69,19 +96,112 @@ export class ConversationService {
       };
     }
 
+    return {
+      replyText: ConversationCopy.askCv(fullName),
+      nextStep: ConversationStep.ASK_CV,
+      contextPatch: { fullName },
+    };
+  }
+
+  private async handleAskCv(
+    data: ZavuInboundMessageData,
+    context: ConversationContext,
+    waNumber: string,
+  ): Promise<ConversationHandleResult> {
+    const fullName = context.fullName;
+    if (!fullName) {
+      return this.handleMenuRoot();
+    }
+
+    if (isSkipCvCommand(data.text)) {
+      return this.completeRegistration(waNumber, fullName);
+    }
+
+    if (data.buttonReply || data.listReply) {
+      return {
+        replyText: ConversationCopy.invalidCv,
+        nextStep: ConversationStep.ASK_CV,
+      };
+    }
+
+    if (!isDocumentMessage(data)) {
+      return {
+        replyText: ConversationCopy.invalidCv,
+        nextStep: ConversationStep.ASK_CV,
+      };
+    }
+
+    const mediaUrl = data.mediaUrl;
+    if (!mediaUrl) {
+      return {
+        replyText: ConversationCopy.cvParseFailed,
+        nextStep: ConversationStep.ASK_CV,
+      };
+    }
+
+    try {
+      const parsed = await this.cvParserService.convertFromUrl(
+        mediaUrl,
+        data.filename,
+        data.mimeType,
+      );
+
+      return this.completeRegistration(
+        waNumber,
+        fullName,
+        parsed.text,
+        parsed.fileName,
+      );
+    } catch (error) {
+      if (error instanceof CvParseError) {
+        if (error.code === 'unsupported_format') {
+          return {
+            replyText: ConversationCopy.cvUnsupportedFormat,
+            nextStep: ConversationStep.ASK_CV,
+          };
+        }
+
+        return {
+          replyText: ConversationCopy.cvParseFailed,
+          nextStep: ConversationStep.ASK_CV,
+        };
+      }
+
+      this.logger.error(`Unexpected CV parse error: ${String(error)}`);
+      return {
+        replyText: ConversationCopy.cvParseFailed,
+        nextStep: ConversationStep.ASK_CV,
+      };
+    }
+  }
+
+  private async completeRegistration(
+    waNumber: string,
+    fullName: string,
+    cvText?: string,
+    cvFileName?: string,
+  ): Promise<ConversationHandleResult> {
     try {
       const result = await this.trabajoyaService.createIntake({
         phone: waNumber,
         fullName,
+        cvText,
+        cvFileName,
+        cvSource: cvText ? 'whatsapp' : undefined,
       });
 
       return {
         replyText: ConversationCopy.registrationSuccess(fullName, result.url),
-        nextStep: ConversationStep.INTAKE_REGISTERED,
+        replyInteractive: buildMainMenuInteractive(
+          ConversationCopy.mainMenuPrompt,
+        ),
+        nextStep: ConversationStep.MENU_MAIN,
         contextPatch: {
           fullName,
           intakeCode: result.code,
           intakeUrl: result.url,
+          cvFileName,
+          cvSkipped: !cvText,
         },
       };
     } catch (error) {
@@ -89,28 +209,49 @@ export class ConversationService {
     }
   }
 
-  private handleIntakeRegistered(
-    data: ZavuInboundMessageData,
-    context: ReturnType<typeof parseConversationContext>,
+  private handleMenuCommand(
+    currentStep: string,
+    context: ConversationContext,
   ): ConversationHandleResult {
-    if (isMenuCommand(data.text)) {
-      return {
-        replyText: ConversationCopy.mainMenuPlaceholder,
-        nextStep: ConversationStep.MENU_MAIN,
-      };
+    if (context.intakeUrl) {
+      return this.showMainMenu(context);
     }
 
-    const url = context.intakeUrl ?? '';
+    if (currentStep === ConversationStep.MENU_ROOT) {
+      return this.handleMenuRoot();
+    }
+
     return {
-      replyText: ConversationCopy.alreadyRegistered(url),
-      nextStep: ConversationStep.INTAKE_REGISTERED,
+      replyText: ConversationCopy.completeRegistrationFirst,
+      nextStep: currentStep,
     };
   }
 
-  private handleMenuMain(): ConversationHandleResult {
+  private showMainMenu(_context: ConversationContext): ConversationHandleResult {
     return {
-      replyText: ConversationCopy.mainMenuPlaceholder,
+      replyText: '',
+      replyInteractive: buildMainMenuInteractive(ConversationCopy.mainMenuPrompt),
       nextStep: ConversationStep.MENU_MAIN,
+    };
+  }
+
+  private showProfileLink(context: ConversationContext): ConversationHandleResult {
+    const url = context.intakeUrl ?? '';
+
+    return {
+      replyText: ConversationCopy.profileLink(url),
+      replyInteractive: buildMainMenuInteractive(
+        ConversationCopy.mainMenuPrompt,
+      ),
+      nextStep: ConversationStep.MENU_MAIN,
+    };
+  }
+
+  private handleReset(): ConversationHandleResult {
+    return {
+      replyText: `${ConversationCopy.resetDone}\n\n${ConversationCopy.welcome}`,
+      nextStep: ConversationStep.ASK_FULL_NAME,
+      resetSession: true,
     };
   }
 
@@ -118,7 +259,7 @@ export class ConversationService {
     if (error instanceof TrabajoyaNotConfiguredError) {
       return {
         replyText: ConversationCopy.serviceUnavailable,
-        nextStep: ConversationStep.ASK_FULL_NAME,
+        nextStep: ConversationStep.ASK_CV,
       };
     }
 
@@ -126,7 +267,7 @@ export class ConversationService {
       if (error.publicError === 'invalid_phone') {
         return {
           replyText: ConversationCopy.invalidPhone,
-          nextStep: ConversationStep.ASK_FULL_NAME,
+          nextStep: ConversationStep.ASK_CV,
         };
       }
 
@@ -134,14 +275,14 @@ export class ConversationService {
         this.logger.error('TrabajoYa API key rejected');
         return {
           replyText: ConversationCopy.serviceUnavailable,
-          nextStep: ConversationStep.ASK_FULL_NAME,
+          nextStep: ConversationStep.ASK_CV,
         };
       }
     }
 
     return {
       replyText: ConversationCopy.registrationFailed,
-      nextStep: ConversationStep.ASK_FULL_NAME,
+      nextStep: ConversationStep.ASK_CV,
     };
   }
 }
@@ -155,6 +296,28 @@ function isValidFullName(value: string): boolean {
   return words.length >= 2;
 }
 
-function isMenuCommand(text: string | undefined): boolean {
-  return text?.trim().toLowerCase() === 'menu';
+function isMenuCommand(value: string | undefined): boolean {
+  return value?.trim().toLowerCase() === 'menu';
+}
+
+function isResetCommand(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'reiniciar' || normalized === 'reset';
+}
+
+function isSkipCvCommand(text: string | undefined): boolean {
+  const normalized = text?.trim().toLowerCase();
+  return normalized === 'omitir' || normalized === 'omitir cv' || normalized === 'skip';
+}
+
+function isDocumentMessage(data: ZavuInboundMessageData): boolean {
+  if (data.messageType === 'document') {
+    return true;
+  }
+
+  return Boolean(data.mediaUrl && data.messageType !== 'image');
+}
+
+function resolveInboundSelection(data: ZavuInboundMessageData): string | undefined {
+  return data.listReply?.id ?? data.buttonReply?.id ?? data.text?.trim();
 }

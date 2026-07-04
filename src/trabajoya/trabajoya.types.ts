@@ -1,6 +1,9 @@
 export interface CreateIntakeRequest {
   phone: string;
   fullName: string;
+  cvText?: string;
+  cvFileName?: string;
+  cvSource?: string;
 }
 
 export interface TrabajoyaIntake {

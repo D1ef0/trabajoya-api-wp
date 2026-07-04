@@ -40,6 +40,7 @@
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.79.2",
     "ioredis": "^5.11.1",
+    "markitdown-ts": "^0.0.10",
     "nestjs-pino": "^4.6.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

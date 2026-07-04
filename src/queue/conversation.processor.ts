@@ -103,38 +103,80 @@ export class ConversationProcessor extends WorkerHost {
       waNumber,
     );
 
-    const sendResult = await this.zavuService.sendText(
-      waNumber,
-      result.replyText,
-      `reply-${inboundMessageId}`,
-    );
+    await this.sendReplies(session.id, waNumber, inboundMessageId, result);
 
-    await this.prisma.messageLog.create({
-      data: {
-        sessionId: session.id,
-        direction: 'outbound',
-        type: 'text',
-        payload: {
-          text: result.replyText,
-          inReplyTo: inboundMessageId,
-          zavuResponse: sendResult,
-        } as Prisma.InputJsonValue,
-        waMessageId: this.extractOutboundMessageId(sendResult),
-      },
-    });
-
-    await this.sessionService.advance(session.id, {
-      ...(result.nextStep !== undefined
-        ? { currentStep: result.nextStep }
-        : {}),
-      ...(result.contextPatch !== undefined
-        ? { context: result.contextPatch as Record<string, unknown> }
-        : {}),
-    });
+    if (result.resetSession) {
+      await this.sessionService.reset(
+        session.id,
+        result.nextStep ?? 'MENU_ROOT',
+      );
+    } else {
+      await this.sessionService.advance(session.id, {
+        ...(result.nextStep !== undefined
+          ? { currentStep: result.nextStep }
+          : {}),
+        ...(result.contextPatch !== undefined
+          ? { context: result.contextPatch as Record<string, unknown> }
+          : {}),
+      });
+    }
 
     this.logger.log(
       `Processed inbound message ${inboundMessageId} from ${waNumber} (step: ${result.nextStep ?? freshSession.currentStep})`,
     );
+  }
+
+  private async sendReplies(
+    sessionId: string,
+    waNumber: string,
+    inboundMessageId: string,
+    result: Awaited<ReturnType<ConversationService['handle']>>,
+  ) {
+    if (result.replyText) {
+      const sendResult = await this.zavuService.sendText(
+        waNumber,
+        result.replyText,
+        `reply-${inboundMessageId}`,
+      );
+
+      await this.prisma.messageLog.create({
+        data: {
+          sessionId,
+          direction: 'outbound',
+          type: 'text',
+          payload: {
+            text: result.replyText,
+            inReplyTo: inboundMessageId,
+            zavuResponse: sendResult,
+          } as Prisma.InputJsonValue,
+          waMessageId: this.extractOutboundMessageId(sendResult),
+        },
+      });
+    }
+
+    if (result.replyInteractive) {
+      const sendResult = await this.zavuService.sendInteractive(
+        {
+          to: waNumber,
+          ...result.replyInteractive,
+        },
+        `reply-menu-${inboundMessageId}`,
+      );
+
+      await this.prisma.messageLog.create({
+        data: {
+          sessionId,
+          direction: 'outbound',
+          type: result.replyInteractive.messageType,
+          payload: {
+            interactive: result.replyInteractive,
+            inReplyTo: inboundMessageId,
+            zavuResponse: sendResult,
+          } as unknown as Prisma.InputJsonValue,
+          waMessageId: this.extractOutboundMessageId(sendResult),
+        },
+      });
+    }
   }
 
   private async isFullyProcessed(
@@ -190,6 +232,9 @@ export class ConversationProcessor extends WorkerHost {
     }
     if (data.listReply) {
       return 'list_reply';
+    }
+    if (data.messageType === 'document' || (data.mediaUrl && data.messageType !== 'image')) {
+      return 'document';
     }
     return data.messageType ?? 'text';
   }
