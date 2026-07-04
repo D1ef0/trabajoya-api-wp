@@ -292,6 +292,47 @@ tbody tr:hover {
   color: var(--muted);
 }
 
+.badge.error {
+  background: rgba(234, 67, 53, 0.15);
+  color: var(--danger);
+}
+
+.badge.warning {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warning);
+}
+
+.method-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+
+.method-get {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.method-post {
+  background: rgba(0, 168, 132, 0.15);
+  color: var(--accent);
+}
+
+.method-put,
+.method-patch {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warning);
+}
+
+.method-delete {
+  background: rgba(234, 67, 53, 0.15);
+  color: var(--danger);
+}
+
 .pagination {
   display: flex;
   gap: 8px;
@@ -406,6 +447,34 @@ dialog::backdrop {
   margin-top: 6px;
   color: rgba(255, 255, 255, 0.65);
   font-size: 0.72rem;
+}
+
+.request-detail {
+  padding: 0 20px 20px;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.detail-block {
+  margin-top: 16px;
+}
+
+.detail-block h4 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail-block .context-box {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+}
+
+#request-dialog {
+  width: min(900px, calc(100vw - 32px));
 }
 
 @media (max-width: 900px) {

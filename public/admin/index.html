@@ -47,6 +47,7 @@
           <button class="nav-btn" data-view="messages">Mensajes</button>
           <button class="nav-btn" data-view="funnel">Embudo</button>
           <button class="nav-btn" data-view="webhooks">Webhooks</button>
+          <button class="nav-btn" data-view="requests">Requests</button>
         </nav>
         <button id="logout-btn" class="ghost-btn">Cerrar sesión</button>
         <p id="user-label" class="user-label"></p>
@@ -149,6 +150,46 @@
           </div>
           <div id="webhooks-pagination" class="pagination"></div>
         </section>
+
+        <section id="view-requests" class="view hidden">
+          <div class="toolbar">
+            <input id="requests-path" type="search" placeholder="Filtrar path…" />
+            <select id="requests-method">
+              <option value="">Todos los métodos</option>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="PATCH">PATCH</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+            <select id="requests-status">
+              <option value="">Todos los status</option>
+              <option value="200">200</option>
+              <option value="201">201</option>
+              <option value="400">400</option>
+              <option value="401">401</option>
+              <option value="403">403</option>
+              <option value="404">404</option>
+              <option value="500">500</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Método</th>
+                  <th>Path</th>
+                  <th>Status</th>
+                  <th>Duración</th>
+                  <th>IP</th>
+                </tr>
+              </thead>
+              <tbody id="requests-table"></tbody>
+            </table>
+          </div>
+          <div id="requests-pagination" class="pagination"></div>
+        </section>
       </main>
     </div>
 
@@ -162,6 +203,17 @@
       </div>
       <div id="dialog-context" class="context-box"></div>
       <div id="dialog-thread" class="thread"></div>
+    </dialog>
+
+    <dialog id="request-dialog">
+      <div class="dialog-header">
+        <div>
+          <h3 id="request-dialog-title">Request</h3>
+          <p id="request-dialog-meta"></p>
+        </div>
+        <button id="request-dialog-close" type="button" aria-label="Cerrar">×</button>
+      </div>
+      <div id="request-dialog-body" class="request-detail"></div>
     </dialog>
 
     <script src="/admin/app.js" type="module"></script>

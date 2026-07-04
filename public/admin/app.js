@@ -5,6 +5,7 @@ const state = {
   sessionsPage: 1,
   messagesPage: 1,
   webhooksPage: 1,
+  requestsPage: 1,
   user: null,
 };
 
@@ -33,6 +34,16 @@ const els = {
   funnelTable: document.getElementById('funnel-table'),
   webhooksTable: document.getElementById('webhooks-table'),
   webhooksPagination: document.getElementById('webhooks-pagination'),
+  requestsTable: document.getElementById('requests-table'),
+  requestsPagination: document.getElementById('requests-pagination'),
+  requestsPath: document.getElementById('requests-path'),
+  requestsMethod: document.getElementById('requests-method'),
+  requestsStatus: document.getElementById('requests-status'),
+  requestDialog: document.getElementById('request-dialog'),
+  requestDialogTitle: document.getElementById('request-dialog-title'),
+  requestDialogMeta: document.getElementById('request-dialog-meta'),
+  requestDialogBody: document.getElementById('request-dialog-body'),
+  requestDialogClose: document.getElementById('request-dialog-close'),
   sessionDialog: document.getElementById('session-dialog'),
   dialogTitle: document.getElementById('dialog-title'),
   dialogMeta: document.getElementById('dialog-meta'),
@@ -136,6 +147,62 @@ function badge(status) {
   return `<span class="badge ${status}">${status}</span>`;
 }
 
+function statusBadge(code) {
+  if (code === null || code === undefined) {
+    return '<span class="badge idle">—</span>';
+  }
+
+  let cls = 'idle';
+  if (code >= 500) cls = 'error';
+  else if (code >= 400) cls = 'warning';
+  else if (code >= 200) cls = 'active';
+
+  return `<span class="badge ${cls}">${code}</span>`;
+}
+
+function methodBadge(method) {
+  return `<span class="method-badge method-${method.toLowerCase()}">${method}</span>`;
+}
+
+function truncate(value, max = 80) {
+  if (!value) return '—';
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatDuration(ms) {
+  if (ms === null || ms === undefined) return '—';
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
+}
+
+function formatJson(value) {
+  if (value === null || value === undefined || value === '') {
+    return '(vacío)';
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function renderPagination(container, page, totalPages, onChange) {
   container.innerHTML = '';
 
@@ -165,6 +232,8 @@ async function loadOverview() {
     ['Mensajes totales', stats.messagesTotal],
     ['Mensajes hoy', stats.messagesToday],
     ['Webhooks hoy', stats.webhooksToday],
+    ['Requests totales', stats.requestCapturesTotal],
+    ['Requests hoy', stats.requestCapturesToday],
   ]
     .map(
       ([label, value]) => `
@@ -331,12 +400,93 @@ async function loadWebhooks() {
   );
 }
 
+async function loadRequests() {
+  const params = new URLSearchParams({
+    page: String(state.requestsPage),
+    limit: '30',
+  });
+
+  if (els.requestsPath.value.trim()) {
+    params.set('path', els.requestsPath.value.trim());
+  }
+  if (els.requestsMethod.value) {
+    params.set('method', els.requestsMethod.value);
+  }
+  if (els.requestsStatus.value) {
+    params.set('statusCode', els.requestsStatus.value);
+  }
+
+  const result = await api(`/request-captures?${params}`);
+  els.requestsTable.innerHTML = result.data
+    .map(
+      (capture) => `
+      <tr data-id="${capture.id}">
+        <td>${formatDate(capture.createdAt)}</td>
+        <td>${methodBadge(capture.method)}</td>
+        <td><code>${escapeHtml(truncate(capture.path, 60))}</code></td>
+        <td>${statusBadge(capture.statusCode)}</td>
+        <td>${formatDuration(capture.durationMs)}</td>
+        <td>${capture.ip ?? '—'}</td>
+      </tr>`,
+    )
+    .join('');
+
+  els.requestsTable.querySelectorAll('tr').forEach((row) => {
+    row.addEventListener('click', () =>
+      openRequestCapture(row.dataset.id ?? ''),
+    );
+  });
+
+  renderPagination(
+    els.requestsPagination,
+    result.meta.page,
+    result.meta.totalPages,
+    (page) => {
+      state.requestsPage = page;
+      loadRequests();
+    },
+  );
+}
+
+async function openRequestCapture(id) {
+  const capture = await api(`/request-captures/${id}`);
+  const query = capture.queryString ? `?${capture.queryString}` : '';
+
+  els.requestDialogTitle.textContent = `${capture.method} ${capture.path}`;
+  els.requestDialogMeta.textContent = [
+    formatDate(capture.createdAt),
+    capture.statusCode ? `HTTP ${capture.statusCode}` : null,
+    capture.durationMs !== null ? formatDuration(capture.durationMs) : null,
+    capture.ip,
+    capture.userAgent,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  els.requestDialogBody.innerHTML = `
+    <section class="detail-block">
+      <h4>URL</h4>
+      <pre class="context-box">${escapeHtml(`${capture.method} ${capture.path}${query}`)}</pre>
+    </section>
+    <section class="detail-block">
+      <h4>Headers</h4>
+      <pre class="context-box">${escapeHtml(formatJson(capture.headers))}</pre>
+    </section>
+    <section class="detail-block">
+      <h4>Body</h4>
+      <pre class="context-box">${escapeHtml(formatJson(capture.body))}</pre>
+    </section>`;
+
+  els.requestDialog.showModal();
+}
+
 const viewMeta = {
   overview: ['Resumen', 'Métricas en tiempo real'],
   sessions: ['Conversaciones', 'Sesiones activas y recientes'],
   messages: ['Mensajes', 'Log completo inbound/outbound'],
   funnel: ['Embudo', 'Distribución por paso del flujo'],
   webhooks: ['Webhooks', 'Eventos procesados (idempotencia)'],
+  requests: ['Requests', 'Log de requests HTTP entrantes'],
 };
 
 async function loadCurrentView() {
@@ -349,6 +499,7 @@ async function loadCurrentView() {
   if (state.view === 'messages') await loadMessages();
   if (state.view === 'funnel') await loadFunnel();
   if (state.view === 'webhooks') await loadWebhooks();
+  if (state.view === 'requests') await loadRequests();
 }
 
 function switchView(view) {
@@ -386,6 +537,9 @@ async function bootstrap() {
   });
 
   els.dialogClose.addEventListener('click', () => els.sessionDialog.close());
+  els.requestDialogClose.addEventListener('click', () =>
+    els.requestDialog.close(),
+  );
 
   let searchTimer;
   const debouncedSessions = () => {
@@ -408,6 +562,24 @@ async function bootstrap() {
   els.messagesDirection.addEventListener('change', () => {
     state.messagesPage = 1;
     loadMessages().catch(console.error);
+  });
+
+  const debouncedRequests = () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.requestsPage = 1;
+      loadRequests().catch(console.error);
+    }, 300);
+  };
+
+  els.requestsPath.addEventListener('input', debouncedRequests);
+  els.requestsMethod.addEventListener('change', () => {
+    state.requestsPage = 1;
+    loadRequests().catch(console.error);
+  });
+  els.requestsStatus.addEventListener('change', () => {
+    state.requestsPage = 1;
+    loadRequests().catch(console.error);
   });
 
   if (getToken()) {
