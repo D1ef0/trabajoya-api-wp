@@ -40,6 +40,10 @@ export class ZavuService {
     this.client = new Zavudev({ apiKey });
   }
 
+  isConfigured(): boolean {
+    return this.client !== null;
+  }
+
   async sendText(
     to: string,
     text: string,

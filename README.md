@@ -8,6 +8,7 @@ Agente WhatsApp para registro de CV en TrabajoYa. Construido con NestJS, Zavu, P
 - Guía al candidato por un flujo conversacional: nombre → CV → registro en TrabajoYa
 - Expone un panel de administración con métricas, sesiones y logs
 - Permite enviar notas de voz generadas con ElevenLabs TTS
+- Permite enviar mensajes de texto WhatsApp vía API externa
 
 ## Requisitos
 
@@ -41,6 +42,7 @@ Referencia completa de endpoints, autenticación, payloads y errores:
 | GET | `/health` | — | Health check (Postgres + Redis) |
 | POST | `/webhooks/zavu` | Firma HMAC | Webhook entrante de Zavu |
 | POST | `/api/voice/send` | `X-Api-Key` | Enviar nota de voz WhatsApp (TTS) |
+| POST | `/api/message/send` | `X-Api-Key` | Enviar mensaje de texto WhatsApp |
 | POST | `/admin/api/auth/login` | — | Login del panel admin |
 | GET | `/admin/api/auth/me` | JWT | Usuario autenticado |
 | GET | `/admin/api/stats` | JWT | Métricas generales |
@@ -91,7 +93,7 @@ Copiar `.env.example` y configurar:
 | `ZAVU_WEBHOOK_SECRET` | Sí | Secret para verificar webhooks |
 | `JWT_SECRET` | Prod | Secret para tokens JWT |
 | `TRABAJOYA_INTAKE_API_KEY` | Sí | API key de TrabajoYa |
-| `VOICE_API_KEY` | Voice | API key para `/api/voice/send` |
+| `VOICE_API_KEY` | Outbound | API key para `/api/voice/send` y `/api/message/send` |
 | `PUBLIC_BASE_URL` | Voice | URL pública para servir audio |
 | `ELEVENLABS_API_KEY` | Voice | API key de ElevenLabs |
 | `ELEVENLABS_VOICE_ID` | Voice | ID de voz para TTS |

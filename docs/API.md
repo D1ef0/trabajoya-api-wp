@@ -192,6 +192,63 @@ curl -X POST http://localhost:3000/api/voice/send \
 
 ---
 
+## Message API
+
+Envía un mensaje de texto por WhatsApp vía Zavu. Misma autenticación que la Voice API.
+
+### `POST /api/message/send`
+
+**Autenticación:** `X-Api-Key`
+
+**Body (JSON)**
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `text` | string | Sí | Texto a enviar (máx. 5000 caracteres) |
+| `phone` | string | Sí | Número destino. E.164 (`+50371234567`) o formato local salvadoreño |
+| `idempotencyKey` | string | No | Clave de idempotencia para evitar envíos duplicados en Zavu |
+
+**Ejemplo de request**
+
+```bash
+curl -X POST http://localhost:3000/api/message/send \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: tu-voice-api-key" \
+  -d '{
+    "text": "Hola, tu postulación ha sido recibida.",
+    "phone": "+50371234567"
+  }'
+```
+
+**Respuesta 200**
+
+```json
+{
+  "ok": true,
+  "messageId": "msg_xyz789"
+}
+```
+
+| Campo | Descripción |
+|-------|-------------|
+| `messageId` | ID del mensaje en Zavu/WhatsApp |
+
+**Errores**
+
+| Código | Causa |
+|--------|-------|
+| `400` | `text` o `phone` ausente/inválido, texto demasiado largo |
+| `401` | API key inválida o no configurada |
+| `502` | Fallo al enviar por Zavu |
+| `503` | Zavu o Message API no configurados |
+
+**Dependencias de entorno**
+
+- `ZAVUDEV_API_KEY` (envío WhatsApp)
+- `VOICE_API_KEY` (autenticación del endpoint)
+
+---
+
 ## Admin — Auth
 
 ### `POST /admin/api/auth/login`
