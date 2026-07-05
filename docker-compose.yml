@@ -42,6 +42,11 @@ services:
       ZAVU_SKIP_SIGNATURE_VERIFICATION: ${ZAVU_SKIP_SIGNATURE_VERIFICATION:-false}
       TRABAJOYA_API_BASE_URL: ${TRABAJOYA_API_BASE_URL:-https://trabajoya.rivasystems.dev}
       TRABAJOYA_INTAKE_API_KEY: ${TRABAJOYA_INTAKE_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID}
+      ELEVENLABS_MODEL_ID: ${ELEVENLABS_MODEL_ID:-eleven_multilingual_v2}
+      VOICE_API_KEY: ${VOICE_API_KEY}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
     depends_on:
       postgres:
         condition: service_healthy

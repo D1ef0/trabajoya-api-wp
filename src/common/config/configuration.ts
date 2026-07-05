@@ -23,4 +23,13 @@ export default () => ({
       'https://trabajoya.rivasystems.dev',
     intakeApiKey: process.env.TRABAJOYA_INTAKE_API_KEY,
   },
+  elevenlabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY,
+    voiceId: process.env.ELEVENLABS_VOICE_ID,
+    modelId: process.env.ELEVENLABS_MODEL_ID ?? 'eleven_multilingual_v2',
+  },
+  voice: {
+    apiKey: process.env.VOICE_API_KEY,
+  },
+  publicBaseUrl: process.env.PUBLIC_BASE_URL,
 });

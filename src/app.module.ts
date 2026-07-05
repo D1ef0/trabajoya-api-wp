@@ -9,6 +9,7 @@ import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { RequestCaptureModule } from './request-capture/request-capture.module';
+import { VoiceModule } from './voice/voice.module';
 import { WebhookModule } from './webhook/webhook.module';
 
 @Module({
@@ -30,12 +31,17 @@ import { WebhookModule } from './webhook/webhook.module';
       serveRoot: '/admin',
       exclude: ['/admin/api*'],
     }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'storage', 'audio'),
+      serveRoot: '/media/audio',
+    }),
     PrismaModule,
     RedisModule,
     RequestCaptureModule,
     WebhookModule,
     HealthModule,
     AdminModule,
+    VoiceModule,
   ],
 })
 export class AppModule {}

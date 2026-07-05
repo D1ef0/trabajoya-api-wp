@@ -114,6 +114,35 @@ export class ZavuService {
     }
   }
 
+  async sendAudio(
+    to: string,
+    mediaUrl: string,
+    idempotencyKey?: string,
+  ): Promise<ZavuSendResult> {
+    if (!this.client) {
+      this.logger.warn(`Skipping sendAudio to ${to}: client not configured`);
+      return { ok: false, failure: clientNotConfiguredFailure() };
+    }
+
+    try {
+      const response = await this.client.messages.send({
+        to,
+        channel: 'whatsapp',
+        messageType: 'audio',
+        content: { mediaUrl },
+        idempotencyKey,
+      });
+
+      return { ok: true, response };
+    } catch (error) {
+      const failure = parseZavuApiError(error);
+      this.logger.warn(
+        `sendAudio failed for ${to} (${failure.code}, status=${failure.status ?? 'n/a'}): ${failure.message}`,
+      );
+      return { ok: false, failure };
+    }
+  }
+
   async resolveInboundMedia(
     data: ZavuInboundMessageData,
   ): Promise<ResolvedInboundMedia> {
