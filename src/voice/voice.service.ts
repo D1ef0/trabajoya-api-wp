@@ -18,6 +18,7 @@ import {
   AudioStorageService,
 } from './audio-storage.service';
 import { SendAudioDto } from './dto/send-audio.dto';
+import { VoiceCopy } from './voice.copy';
 
 const MAX_TEXT_LENGTH = 5000;
 
@@ -85,6 +86,23 @@ export class VoiceService {
         throw new ServiceUnavailableException(error.message);
       }
       throw error;
+    }
+
+    const introKey = dto.idempotencyKey
+      ? `${dto.idempotencyKey}-intro`
+      : undefined;
+
+    const introResult = await this.zavu.sendText(
+      phone,
+      VoiceCopy.audioIntro,
+      introKey,
+    );
+
+    if (!introResult.ok) {
+      throw new BadGatewayException(
+        introResult.failure.message ??
+          'Failed to send WhatsApp intro message before audio',
+      );
     }
 
     const sendResult = await this.zavu.sendAudio(
