@@ -40,9 +40,17 @@ export class VoiceService {
   async sendAudioMessage(dto: SendAudioDto): Promise<SendAudioMessageResult> {
     this.assertDependenciesConfigured();
 
-    const text = dto.text?.trim();
+    if (!dto || typeof dto !== 'object') {
+      throw new BadRequestException(
+        'Request body must be JSON with text and phone fields',
+      );
+    }
+
+    const text = typeof dto.text === 'string' ? dto.text.trim() : '';
     if (!text) {
-      throw new BadRequestException('text is required');
+      throw new BadRequestException(
+        'text is required (send JSON body, not form-data)',
+      );
     }
 
     if (text.length > MAX_TEXT_LENGTH) {
