@@ -1,0 +1,36 @@
+timeline
+    title Evolución del proyecto cv-api-wp (por commits)
+
+    section Fundación
+        db3a34a : NestJS + Docker + Prisma/Postgres
+                : Webhook Zavu (HMAC) + BullMQ/Redis
+                : SessionService + ConversationProcessor
+                : Health check
+
+    section Admin
+        2beeeee : Panel admin SPA + JWT auth
+        9fb5987 : Captura de requests + fix webhook Zavu
+        f658215 : Vista Requests en dashboard
+        075de69 : Detalle de payload webhook
+        2119ce7 : Persistencia de vista en URL hash
+
+    section Flujo WhatsApp
+        cdaf18f : Intake flow + integración TrabajoYa
+        5302f76 : Anti-duplicados / orden de mensajes (Redis lock)
+        4b6c4b9 : Upload CV + menús interactivos + reset sesión
+        e6409d5 : Mensajes del bot más explícitos
+        5828a3c : Skip menú post-registro
+        9e9369b : Reconocer replies de lista al resetear
+
+    section Integraciones externas
+        cf5e6c2 : Sanitización texto CV → TrabajoYa
+        5466b60 : Resolución media CV desde Zavu
+        fdca080 : Manejo errores Zavu + unit tests
+        daf147e : ElevenLabs TTS → audio WhatsApp
+        85cf50c : Texto intro antes del audio de feedback
+        d5831b2 : POST /api/message/send (texto saliente)
+
+    section Infra & Docs
+        8927d35 : Fix puerto Docker (Dokploy)
+        7292231 : Env vars TrabajoYa en Docker
+        d7eb003 : README + docs/API.md

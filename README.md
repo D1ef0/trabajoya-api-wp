@@ -59,6 +59,8 @@ Referencia completa de endpoints, autenticación, payloads y errores:
 
 ## Arquitectura
 
+![Arquitectura TrabajoYA — desde WhatsApp hasta perfil, recomendaciones y simulación de entrevista](docs/diagrams/04-arquitectura-trabajoya.png)
+
 ```
 WhatsApp → Zavu → POST /webhooks/zavu
                         ↓

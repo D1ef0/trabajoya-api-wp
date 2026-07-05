@@ -1,0 +1,59 @@
+flowchart TB
+    subgraph Entrada["Entrada"]
+        WA["WhatsApp"]
+        Zavu["Zavu API"]
+        WA --> Zavu
+    end
+
+    subgraph API["NestJS API (cv-api-wp)"]
+        WH["POST /webhooks/zavu"]
+        VOICE["POST /api/voice/send"]
+        MSG["POST /api/message/send"]
+        ADMIN["/admin/* SPA + /admin/api/*"]
+        HEALTH["GET /health"]
+        MEDIA["GET /media/audio/*"]
+    end
+
+    subgraph Procesamiento["Procesamiento"]
+        RC["RequestCapture Middleware"]
+        BQ["BullMQ Queue"]
+        CP["ConversationProcessor"]
+        CS["ConversationService"]
+        SS["SessionService"]
+        RL["RedisLockService"]
+    end
+
+    subgraph Servicios["Servicios"]
+        ZS["ZavuService"]
+        TY["TrabajoYaService"]
+        CVP["CvParserService"]
+        EL["ElevenLabsService"]
+        AS["AudioStorageService"]
+    end
+
+    subgraph Persistencia["Persistencia"]
+        PG[("PostgreSQL / Prisma")]
+        RD[("Redis")]
+    end
+
+    Zavu -->|"webhook HMAC"| WH
+    WH --> RC
+    WH --> BQ
+    BQ --> CP
+    CP --> RL
+    CP --> CS
+    CS --> SS
+    CS --> CVP
+    CS --> TY
+    CS --> ZS
+    VOICE --> EL
+    VOICE --> AS
+    VOICE --> ZS
+    MSG --> ZS
+    SS --> PG
+    RC --> PG
+    BQ --> RD
+    RL --> RD
+    ADMIN --> PG
+    ZS --> Zavu
+    Zavu --> WA

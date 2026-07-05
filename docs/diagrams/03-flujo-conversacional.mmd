@@ -1,0 +1,31 @@
+stateDiagram-v2
+    [*] --> Bienvenida: Mensaje entrante WhatsApp
+
+    Bienvenida --> PedirNombre: Usuario nuevo
+    PedirNombre --> PedirCV: Nombre recibido
+
+    PedirCV --> ProcesarCV: Documento/imagen CV
+    ProcesarCV --> RegistrarTrabajoYa: Texto extraído + sanitizado
+
+    RegistrarTrabajoYa --> Exito: Registro OK
+    RegistrarTrabajoYa --> Fallback: Error TrabajoYa
+
+    Exito --> FeedbackAudio: Opcional ElevenLabs TTS
+    FeedbackAudio --> [*]: Texto intro + nota de voz
+
+    state MenusInteractivos {
+        [*] --> MenuPrincipal
+        MenuPrincipal --> ResetSesion: Opción reset
+        ResetSesion --> Bienvenida
+    }
+
+    note right of ProcesarCV
+        Commit 4b6c4b9:
+        upload CV, menús,
+        reset de sesión
+    end note
+
+    note right of RegistrarTrabajoYa
+        Commit cdaf18f:
+        integración TrabajoYa
+    end note

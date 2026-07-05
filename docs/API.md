@@ -2,6 +2,8 @@
 
 API backend para el agente WhatsApp de TrabajoYa. Recibe mensajes vía webhooks de Zavu, gestiona conversaciones de registro de CV y expone endpoints de administración y envío de notas de voz.
 
+Este servicio corresponde al **paso 1** (entrada WhatsApp → intake) del [diagrama de arquitectura TrabajoYA](diagrams/04-arquitectura-trabajoya.png). Los pasos 2–5 (perfil por voz, recomendaciones, entrevistas) viven en el backend/frontend TrabajoYA; cv-api-wp integra con ellos creando intakes y, opcionalmente, enviando mensajes salientes.
+
 **Base URL:** `http://localhost:3000` (desarrollo) o la URL de producción configurada en `PUBLIC_BASE_URL`.
 
 ---
