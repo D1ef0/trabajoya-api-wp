@@ -31,9 +31,10 @@ export function normalizeZavuInboundData(
       : undefined);
   const listReply =
     data.listReply ??
-    (interactiveReply?.type === 'list_reply' &&
-    interactiveReply.id &&
-    interactiveReply.title
+    (interactiveReply?.id &&
+    interactiveReply.title &&
+    interactiveReply.type !== 'button_reply' &&
+    isListInteractiveReply(interactiveReply)
       ? {
           id: interactiveReply.id,
           title: interactiveReply.title,
@@ -61,6 +62,24 @@ function readContent(data: ZavuInboundMessageData): ZavuInboundContent | undefin
   return record.content as ZavuInboundContent;
 }
 
+function isListInteractiveReply(
+  reply: NonNullable<ZavuInboundContent['interactiveReply']>,
+): boolean {
+  if (reply.type === 'list_reply') {
+    return true;
+  }
+
+  if (reply.type === 'button_reply') {
+    return false;
+  }
+
+  return (
+    reply.type === undefined ||
+    reply.type === 'interactive' ||
+    reply.id.startsWith('menu_')
+  );
+}
+
 export function isDocumentInbound(data: ZavuInboundMessageData): boolean {
   const normalized = normalizeZavuInboundData(data);
 
@@ -72,6 +91,17 @@ export function isDocumentInbound(data: ZavuInboundMessageData): boolean {
     normalized.mediaUrl &&
       normalized.messageType !== 'image' &&
       normalized.messageType !== 'sticker',
+  );
+}
+
+export function resolveInboundSelection(
+  data: ZavuInboundMessageData,
+): string | undefined {
+  const normalized = normalizeZavuInboundData(data);
+  return (
+    normalized.listReply?.id ??
+    normalized.buttonReply?.id ??
+    normalized.text?.trim()
   );
 }
 

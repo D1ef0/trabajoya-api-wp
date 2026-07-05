@@ -11,6 +11,7 @@ import {
   shouldNotifyUserOfSendFailure,
 } from '../zavu/zavu-error.util';
 import { ZavuService } from '../zavu/zavu.service';
+import { normalizeZavuInboundData } from '../zavu/zavu-inbound.util';
 import {
   resolveInboundMessageId,
   ZavuInboundMessageData,
@@ -39,7 +40,7 @@ export class ConversationProcessor extends WorkerHost {
 
   async process(job: Job<ConversationJobPayload>) {
     const event = job.data.event as unknown as ZavuWebhookEvent;
-    const data = event.data as ZavuInboundMessageData;
+    const data = normalizeZavuInboundData(event.data as ZavuInboundMessageData);
     const waNumber = job.data.waNumber;
     const inboundMessageId = resolveInboundMessageId(data);
 

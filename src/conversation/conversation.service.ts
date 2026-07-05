@@ -7,7 +7,12 @@ import {
   TrabajoyaApiError,
   TrabajoyaNotConfiguredError,
 } from '../trabajoya/trabajoya.types';
-import { buildInboundMediaDebug, isDocumentInbound } from '../zavu/zavu-inbound.util';
+import {
+  buildInboundMediaDebug,
+  isDocumentInbound,
+  normalizeZavuInboundData,
+  resolveInboundSelection,
+} from '../zavu/zavu-inbound.util';
 import { ZavuService } from '../zavu/zavu.service';
 import { ZavuInboundMessageData } from '../zavu/zavu.types';
 import { ConversationCopy } from './conversation.copy';
@@ -16,6 +21,7 @@ import {
   MenuOption,
 } from './conversation.constants';
 import { buildMainMenuInteractive } from './conversation.menu';
+import { resolveMenuOptionFromInbound } from './conversation.menu-options';
 import {
   ConversationContext,
   ConversationHandleResult,
@@ -37,10 +43,12 @@ export class ConversationService {
     data: ZavuInboundMessageData,
     waNumber: string,
   ): Promise<ConversationHandleResult> {
+    const normalized = normalizeZavuInboundData(data);
     const context = parseConversationContext(session.context);
-    const inbound = resolveInboundSelection(data);
+    const inbound = resolveInboundSelection(normalized);
+    const menuOption = resolveMenuOptionFromInbound(normalized);
 
-    if (isResetCommand(inbound)) {
+    if (isResetCommand(inbound) || menuOption === MenuOption.RESET) {
       return this.handleReset();
     }
 
@@ -48,11 +56,7 @@ export class ConversationService {
       return this.handleMenuCommand(session.currentStep, context);
     }
 
-    if (inbound === MenuOption.RESET) {
-      return this.handleReset();
-    }
-
-    if (inbound === MenuOption.PROFILE && context.intakeUrl) {
+    if (menuOption === MenuOption.PROFILE && context.intakeUrl) {
       return this.showProfileLink(context);
     }
 
@@ -60,9 +64,9 @@ export class ConversationService {
       case ConversationStep.MENU_ROOT:
         return this.handleMenuRoot();
       case ConversationStep.ASK_FULL_NAME:
-        return this.handleAskFullName(data);
+        return this.handleAskFullName(normalized);
       case ConversationStep.ASK_CV:
-        return this.handleAskCv(data, context, waNumber);
+        return this.handleAskCv(normalized, context, waNumber);
       case ConversationStep.INTAKE_REGISTERED:
       case ConversationStep.MENU_MAIN:
         return this.showMainMenu(context);
@@ -460,22 +464,26 @@ function isValidFullName(value: string): boolean {
   return words.length >= 2;
 }
 
+function normalizeCommand(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.trim().toLowerCase().replace(/\*/g, '');
+}
+
 function isMenuCommand(value: string | undefined): boolean {
-  return value?.trim().toLowerCase() === 'menu';
+  return normalizeCommand(value) === 'menu';
 }
 
 function isResetCommand(value: string | undefined): boolean {
-  const normalized = value?.trim().toLowerCase();
+  const normalized = normalizeCommand(value);
   return normalized === 'reiniciar' || normalized === 'reset';
 }
 
 function isSkipCvCommand(text: string | undefined): boolean {
-  const normalized = text?.trim().toLowerCase();
+  const normalized = normalizeCommand(text);
   return normalized === 'omitir' || normalized === 'omitir cv' || normalized === 'skip';
-}
-
-function resolveInboundSelection(data: ZavuInboundMessageData): string | undefined {
-  return data.listReply?.id ?? data.buttonReply?.id ?? data.text?.trim();
 }
 
 function isUserFacingTrabajoyaError(message: string): boolean {
