@@ -300,7 +300,6 @@ export class ConversationService {
 
     return {
       replyText,
-      replyInteractive: buildMainMenuInteractive(ConversationCopy.mainMenuPrompt),
       nextStep: ConversationStep.MENU_MAIN,
       contextPatch: {
         fullName,
