@@ -5,10 +5,12 @@ import {
   buildInboundMediaDebug,
   normalizeZavuInboundData,
 } from './zavu-inbound.util';
+import { parseZavuApiError } from './zavu-error.util';
 import {
   resolveInboundMessageId,
   SendInteractiveParams,
   ZavuInboundMessageData,
+  ZavuSendResult,
 } from './zavu.types';
 
 const MEDIA_RESOLVE_ATTEMPTS = 3;
@@ -38,52 +40,78 @@ export class ZavuService {
     this.client = new Zavudev({ apiKey });
   }
 
-  async sendText(to: string, text: string, idempotencyKey?: string) {
+  async sendText(
+    to: string,
+    text: string,
+    idempotencyKey?: string,
+  ): Promise<ZavuSendResult> {
     if (!this.client) {
       this.logger.warn(`Skipping sendText to ${to}: client not configured`);
-      return null;
+      return { ok: false, failure: clientNotConfiguredFailure() };
     }
 
-    return this.client.messages.send({
-      to,
-      channel: 'whatsapp',
-      text,
-      idempotencyKey,
-    });
+    try {
+      const response = await this.client.messages.send({
+        to,
+        channel: 'whatsapp',
+        text,
+        idempotencyKey,
+      });
+
+      return { ok: true, response };
+    } catch (error) {
+      const failure = parseZavuApiError(error);
+      this.logger.warn(
+        `sendText failed for ${to} (${failure.code}, status=${failure.status ?? 'n/a'}): ${failure.message}`,
+      );
+      return { ok: false, failure };
+    }
   }
 
-  async sendInteractive(params: SendInteractiveParams, idempotencyKey?: string) {
+  async sendInteractive(
+    params: SendInteractiveParams,
+    idempotencyKey?: string,
+  ): Promise<ZavuSendResult> {
     if (!this.client) {
       this.logger.warn(
         `Skipping sendInteractive to ${params.to}: client not configured`,
       );
-      return null;
+      return { ok: false, failure: clientNotConfiguredFailure() };
     }
 
-    if (params.messageType === 'buttons') {
-      return this.client.messages.send({
-        to: params.to,
-        channel: 'whatsapp',
-        messageType: 'buttons',
-        text: params.text,
-        content: {
-          buttons: params.buttons ?? [],
-        },
-        idempotencyKey,
-      });
-    }
+    try {
+      const response =
+        params.messageType === 'buttons'
+          ? await this.client.messages.send({
+              to: params.to,
+              channel: 'whatsapp',
+              messageType: 'buttons',
+              text: params.text,
+              content: {
+                buttons: params.buttons ?? [],
+              },
+              idempotencyKey,
+            })
+          : await this.client.messages.send({
+              to: params.to,
+              channel: 'whatsapp',
+              messageType: 'list',
+              text: params.text,
+              content: {
+                listButton: params.listButton ?? 'Ver opciones',
+                sections: params.sections ?? [],
+              },
+              idempotencyKey,
+            });
 
-    return this.client.messages.send({
-      to: params.to,
-      channel: 'whatsapp',
-      messageType: 'list',
-      text: params.text,
-      content: {
-        listButton: params.listButton ?? 'Ver opciones',
-        sections: params.sections ?? [],
-      },
-      idempotencyKey,
-    });
+      return { ok: true, response };
+    } catch (error) {
+      const failure = parseZavuApiError(error);
+      this.logger.warn(
+        `sendInteractive failed for ${params.to} (${failure.code}, status=${failure.status ?? 'n/a'}): ${failure.message}`,
+      );
+      return { ok: false, failure };
+    }
   }
 
   async resolveInboundMedia(
@@ -130,8 +158,9 @@ export class ZavuService {
           };
         }
       } catch (error) {
+        const failure = parseZavuApiError(error);
         this.logger.warn(
-          `Failed to retrieve message ${messageId} for media (attempt ${attempt}): ${String(error)}`,
+          `Failed to retrieve message ${messageId} for media (attempt ${attempt}, ${failure.code}): ${failure.message}`,
         );
       }
 
@@ -151,6 +180,15 @@ export class ZavuService {
       },
     };
   }
+}
+
+function clientNotConfiguredFailure() {
+  return {
+    code: 'client_not_configured',
+    status: undefined,
+    message: 'ZAVUDEV_API_KEY not configured',
+    retryable: false,
+  };
 }
 
 function sleep(ms: number): Promise<void> {

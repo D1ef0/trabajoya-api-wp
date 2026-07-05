@@ -74,3 +74,14 @@ export interface SendInteractiveParams {
   listButton?: string;
   sections?: ZavuListSection[];
 }
+
+export interface ZavuSendFailure {
+  code: string;
+  status: number | undefined;
+  message: string;
+  retryable: boolean;
+}
+
+export type ZavuSendResult<T = unknown> =
+  | { ok: true; response: T }
+  | { ok: false; failure: ZavuSendFailure };

@@ -6,10 +6,16 @@ import { ConversationService } from '../conversation/conversation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisLockService } from '../redis/redis-lock.service';
 import { SessionService } from '../session/session.service';
+import {
+  mapZavuSendFailureToUserMessage,
+  shouldNotifyUserOfSendFailure,
+} from '../zavu/zavu-error.util';
 import { ZavuService } from '../zavu/zavu.service';
 import {
   resolveInboundMessageId,
   ZavuInboundMessageData,
+  ZavuSendFailure,
+  ZavuSendResult,
   ZavuWebhookEvent,
 } from '../zavu/zavu.types';
 import { CONVERSATION_QUEUE, ConversationJobPayload } from './queue.constants';
@@ -132,6 +138,8 @@ export class ConversationProcessor extends WorkerHost {
     inboundMessageId: string,
     result: Awaited<ReturnType<ConversationService['handle']>>,
   ) {
+    const failures: ZavuSendFailure[] = [];
+
     if (result.replyText) {
       const sendResult = await this.zavuService.sendText(
         waNumber,
@@ -139,22 +147,35 @@ export class ConversationProcessor extends WorkerHost {
         `reply-${inboundMessageId}`,
       );
 
-      await this.prisma.messageLog.create({
-        data: {
+      if (sendResult.ok) {
+        await this.logOutboundMessage({
           sessionId,
-          direction: 'outbound',
+          inboundMessageId,
           type: 'text',
           payload: {
             text: result.replyText,
-            inReplyTo: inboundMessageId,
-            zavuResponse: sendResult,
+            zavuResponse: sendResult.response,
             ...(result.processingMeta
               ? { processing: result.processingMeta }
               : {}),
-          } as Prisma.InputJsonValue,
-          waMessageId: this.extractOutboundMessageId(sendResult),
-        },
-      });
+          },
+          sendResult,
+        });
+      } else {
+        failures.push(sendResult.failure);
+        await this.logOutboundFailure({
+          sessionId,
+          inboundMessageId,
+          type: 'text',
+          payload: {
+            text: result.replyText,
+            ...(result.processingMeta
+              ? { processing: result.processingMeta }
+              : {}),
+          },
+          failure: sendResult.failure,
+        });
+      }
     }
 
     if (result.replyInteractive) {
@@ -166,20 +187,123 @@ export class ConversationProcessor extends WorkerHost {
         `reply-menu-${inboundMessageId}`,
       );
 
-      await this.prisma.messageLog.create({
-        data: {
+      if (sendResult.ok) {
+        await this.logOutboundMessage({
           sessionId,
-          direction: 'outbound',
+          inboundMessageId,
           type: result.replyInteractive.messageType,
           payload: {
             interactive: result.replyInteractive,
-            inReplyTo: inboundMessageId,
-            zavuResponse: sendResult,
-          } as unknown as Prisma.InputJsonValue,
-          waMessageId: this.extractOutboundMessageId(sendResult),
-        },
-      });
+            zavuResponse: sendResult.response,
+          },
+          sendResult,
+        });
+      } else {
+        failures.push(sendResult.failure);
+        await this.logOutboundFailure({
+          sessionId,
+          inboundMessageId,
+          type: result.replyInteractive.messageType,
+          payload: {
+            interactive: result.replyInteractive,
+          },
+          failure: sendResult.failure,
+        });
+      }
     }
+
+    if (failures.length === 0) {
+      return;
+    }
+
+    const primaryFailure = failures[0];
+    if (primaryFailure.retryable) {
+      throw new Error(
+        `Retryable Zavu send failure (${primaryFailure.code}, status=${primaryFailure.status ?? 'n/a'})`,
+      );
+    }
+
+    if (shouldNotifyUserOfSendFailure(primaryFailure)) {
+      const notice = mapZavuSendFailureToUserMessage(primaryFailure);
+      const noticeResult = await this.zavuService.sendText(
+        waNumber,
+        notice,
+        `reply-error-${inboundMessageId}`,
+      );
+
+      if (noticeResult.ok) {
+        await this.logOutboundMessage({
+          sessionId,
+          inboundMessageId,
+          type: 'text',
+          payload: {
+            text: notice,
+            deliveryNotice: true,
+            zavuResponse: noticeResult.response,
+            triggeredBy: primaryFailure.code,
+          },
+          sendResult: noticeResult,
+        });
+      } else {
+        await this.logOutboundFailure({
+          sessionId,
+          inboundMessageId,
+          type: 'text',
+          payload: {
+            text: notice,
+            deliveryNotice: true,
+            triggeredBy: primaryFailure.code,
+          },
+          failure: noticeResult.failure,
+        });
+      }
+    }
+  }
+
+  private async logOutboundMessage(params: {
+    sessionId: string;
+    inboundMessageId: string;
+    type: string;
+    payload: Record<string, unknown>;
+    sendResult: ZavuSendResult;
+  }) {
+    await this.prisma.messageLog.create({
+      data: {
+        sessionId: params.sessionId,
+        direction: 'outbound',
+        type: params.type,
+        payload: {
+          ...params.payload,
+          inReplyTo: params.inboundMessageId,
+        } as Prisma.InputJsonValue,
+        waMessageId: this.extractOutboundMessageId(params.sendResult),
+      },
+    });
+  }
+
+  private async logOutboundFailure(params: {
+    sessionId: string;
+    inboundMessageId: string;
+    type: string;
+    payload: Record<string, unknown>;
+    failure: ZavuSendFailure;
+  }) {
+    this.logger.warn(
+      `Outbound ${params.type} failed for ${params.inboundMessageId}: ${params.failure.code}`,
+    );
+
+    await this.prisma.messageLog.create({
+      data: {
+        sessionId: params.sessionId,
+        direction: 'outbound',
+        type: params.type,
+        payload: {
+          ...params.payload,
+          inReplyTo: params.inboundMessageId,
+          zavuError: params.failure,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
   }
 
   private async isFullyProcessed(
@@ -195,10 +319,15 @@ export class ConversationProcessor extends WorkerHost {
           equals: inboundMessageId,
         },
       },
-      select: { id: true },
+      select: { id: true, payload: true },
     });
 
-    return Boolean(outbound);
+    if (!outbound) {
+      return false;
+    }
+
+    const payload = outbound.payload as Record<string, unknown> | null;
+    return payload?.zavuError === undefined;
   }
 
   private async claimInboundMessage(
@@ -242,12 +371,17 @@ export class ConversationProcessor extends WorkerHost {
     return data.messageType ?? 'text';
   }
 
-  private extractOutboundMessageId(sendResult: unknown): string | undefined {
-    if (!sendResult || typeof sendResult !== 'object') {
+  private extractOutboundMessageId(sendResult: ZavuSendResult): string | undefined {
+    if (!sendResult.ok) {
       return undefined;
     }
 
-    const record = sendResult as Record<string, unknown>;
+    const response = sendResult.response;
+    if (!response || typeof response !== 'object') {
+      return undefined;
+    }
+
+    const record = response as Record<string, unknown>;
     const message = record.message;
 
     if (message && typeof message === 'object') {

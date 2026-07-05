@@ -29,4 +29,12 @@ export const ConversationCopy = {
     'No pudimos completar tu registro en este momento. Por favor intenta de nuevo en unos minutos.',
   invalidPhone:
     'No pudimos validar tu número de teléfono. Por favor contacta soporte.',
+  zavuSendFailed:
+    'No pudimos enviar el mensaje en este momento. Por favor intenta de nuevo.',
+  zavuWindowClosed:
+    'Han pasado más de 24 horas desde tu último mensaje. Escríbenos de nuevo para continuar.',
+  zavuUrlBlocked:
+    'No pudimos enviar el enlace en este momento. Por favor intenta más tarde o contacta soporte.',
+  zavuEmailKycRequired:
+    'El envío por correo no está disponible en este momento.',
 } as const;
