@@ -14,13 +14,13 @@ export function buildMainMenuInteractive(
         rows: [
           {
             id: MenuOption.PROFILE,
-            title: 'Ver mi perfil',
-            description: 'Abrir enlace de registro',
+            title: 'Abrir mi perfil',
+            description: 'Ver enlace y continuar entrevista de voz',
           },
           {
             id: MenuOption.RESET,
-            title: 'Reiniciar',
-            description: 'Empezar de nuevo (pruebas)',
+            title: 'Empezar de nuevo',
+            description: 'Borrar registro y volver al inicio',
           },
         ],
       },
