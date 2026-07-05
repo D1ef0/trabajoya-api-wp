@@ -76,7 +76,7 @@ function isListInteractiveReply(
   return (
     reply.type === undefined ||
     reply.type === 'interactive' ||
-    reply.id.startsWith('menu_')
+    Boolean(reply.id?.startsWith('menu_'))
   );
 }
 
